@@ -137,21 +137,22 @@ body{
 }
 .picker-label{
   font-size:10px;letter-spacing:.12em;color:var(--ink2);
-  margin-bottom:7px;
+  margin-bottom:8px;
 }
-.picker-opts{display:flex;flex-wrap:wrap;gap:5px}
+.picker-opts{display:flex;flex-wrap:wrap;gap:6px}
 .popt{
-  font-size:12px;padding:5px 10px;border-radius:999px;
+  font-size:13px;padding:0 12px;border-radius:999px;
   border:1px solid var(--ink3);background:transparent;
   color:var(--ink2);cursor:pointer;transition:all .2s;
-  white-space:nowrap;
+  white-space:nowrap;min-height:44px;display:flex;
+  align-items:center;justify-content:center;
 }
 .popt:active{transform:scale(.95)}
 .popt.active{
   border-color:rgba(125,184,164,.7);
   color:var(--accent);background:rgba(125,184,164,.1);
 }
-.popt-lg{font-size:12px;padding:6px 10px;width:100%}
+.popt-lg{font-size:13px;padding:0 12px;width:100%;min-height:44px}
 
 /* 自定义时长输入 */
 .custom-row{
