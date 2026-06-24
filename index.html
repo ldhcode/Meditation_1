@@ -405,86 +405,72 @@ let totalMin = parseInt(localStorage.getItem('xi_minutes')||'0');
 document.getElementById('session-badge').textContent = `第 ${sessions+1} 次练习`;
 
 /* ═══════════════════════════════════════════
+   DURATION CONFIG
+   durations in seconds per step (4 practice steps)
+   ratios: settle 15%, breath 35%, observe 30%, return 20%
+═══════════════════════════════════════════ */
+const DURATION_OPTIONS=[
+  {label:'5 分钟', mins:5},
+  {label:'10 分钟', mins:10},
+  {label:'20 分钟', mins:20},
+  {label:'自定义', mins:null},
+];
+let selectedMins=10;
+
+// step durations derived from total
+function getStepDurations(totalSecs){
+  return [
+    Math.round(totalSecs*.15), // settle
+    Math.round(totalSecs*.35), // breath
+    Math.round(totalSecs*.30), // observe
+    Math.round(totalSecs*.20), // return
+  ];
+}
+
+/* ═══════════════════════════════════════════
    STEPS DEFINITION
 ═══════════════════════════════════════════ */
 const STEPS=[
   {
     id:'welcome',
     title:'息',
-    sub:'正念冥想 · 10分钟\n为自己留一段安静的时光',
+    sub:'正念冥想\n为自己留一段安静的时光',
     orbColor:'rgba(90,130,180,.3)',
     orbShadow:'0 0 40px rgba(90,130,180,.2)',
-    hue:215,
-    sound:null,
-    breathMode:false,
+    hue:215, sound:null, breathMode:false,
     btn:'开始练习',
     btnGrad:'linear-gradient(135deg,#4a7898,#6a9ab8)',
-    ghost:null
+    ghost:null, hasDuration:true
   },
   {
-    id:'settle',
-    title:'安住',
-    sub:'感受身体与地面的接触\n让重力把你带到此刻',
-    orbColor:'rgba(80,155,175,.32)',
-    orbShadow:'0 0 50px rgba(80,155,175,.18)',
-    hue:195,
-    sound:'nature',
-    breathMode:false,
-    btn:'继续',
-    btnGrad:'rgba(255,255,255,.08)',
-    ghost:'跳过'
+    id:'settle', title:'落地', sub:'感受身体与地面的接触\n让重力把你带到此刻',
+    orbColor:'rgba(80,155,175,.32)', orbShadow:'0 0 50px rgba(80,155,175,.18)',
+    hue:195, sound:'nature', breathMode:false,
+    btn:'继续', btnGrad:'rgba(255,255,255,.08)', ghost:'跳过'
   },
   {
-    id:'breath',
-    title:'随息',
-    sub:'把全部注意力放在呼吸上\n只是感受，不需要控制',
-    orbColor:'rgba(80,175,140,.35)',
-    orbShadow:'0 0 60px rgba(80,175,140,.2)',
-    hue:162,
-    sound:'ocean',
-    breathMode:true,
-    btn:'继续',
-    btnGrad:'rgba(255,255,255,.08)',
-    ghost:'暂停音频'
+    id:'breath', title:'随息', sub:'把全部注意力放在呼吸上\n只是感受，不需要控制',
+    orbColor:'rgba(80,175,140,.35)', orbShadow:'0 0 60px rgba(80,175,140,.2)',
+    hue:162, sound:'ocean', breathMode:true,
+    btn:'继续', btnGrad:'rgba(255,255,255,.08)', ghost:'暂停音频'
   },
   {
-    id:'observe',
-    title:'观照',
-    sub:'念头升起，如云朵飘过\n你是天空，不是云',
-    orbColor:'rgba(140,100,200,.3)',
-    orbShadow:'0 0 55px rgba(140,100,200,.18)',
-    hue:265,
-    sound:'rain',
-    breathMode:false,
-    btn:'继续',
-    btnGrad:'rgba(255,255,255,.08)',
-    ghost:'暂停音频'
+    id:'observe', title:'观照', sub:'念头升起，如云朵飘过\n你是天空，不是云',
+    orbColor:'rgba(140,100,200,.3)', orbShadow:'0 0 55px rgba(140,100,200,.18)',
+    hue:265, sound:'rain', breathMode:false,
+    btn:'继续', btnGrad:'rgba(255,255,255,.08)', ghost:'暂停音频'
   },
   {
-    id:'return',
-    title:'归来',
-    sub:'轻轻地回到呼吸\n每一次回来，都是成功',
-    orbColor:'rgba(80,175,130,.38)',
-    orbShadow:'0 0 60px rgba(80,175,130,.22)',
-    hue:155,
-    sound:'forest',
-    breathMode:true,
-    btn:'完成练习',
-    btnGrad:'linear-gradient(135deg,#3a7a5a,#5aa07a)',
-    ghost:null
+    id:'return', title:'归来', sub:'轻轻地回到呼吸\n每一次回来，都是成功',
+    orbColor:'rgba(80,175,130,.38)', orbShadow:'0 0 60px rgba(80,175,130,.22)',
+    hue:155, sound:'forest', breathMode:true,
+    btn:'完成练习', btnGrad:'linear-gradient(135deg,#3a7a5a,#5aa07a)', ghost:null
   },
   {
-    id:'done',
-    title:'完成',
-    sub:null,
-    orbColor:'rgba(160,139,200,.28)',
-    orbShadow:'0 0 50px rgba(160,139,200,.2)',
-    hue:270,
-    sound:null,
-    breathMode:false,
-    btn:'再次练习',
-    btnGrad:'rgba(255,255,255,.08)',
-    ghost:'分享给朋友'
+    id:'done', title:'完成', sub:null,
+    orbColor:'rgba(160,139,200,.28)', orbShadow:'0 0 50px rgba(160,139,200,.2)',
+    hue:270, sound:null, breathMode:false,
+    btn:'再次练习', btnGrad:'rgba(255,255,255,.08)', ghost:'分享给朋友'
   }
 ];
 
@@ -500,20 +486,15 @@ const phases=[
 let phaseIdx=0;
 
 function startBreath(){
-  stopBreath();
-  phaseIdx=0; breathCount=phases[0].dur;
-  runBreath();
+  stopBreath(); phaseIdx=0; runBreath();
 }
-
 function runBreath(){
   const p=phases[phaseIdx];
-  breathPhase=p.state;
-  breathCount=p.dur;
-  updateOrbState();
-  setPhaseUI(p.name, breathCount);
+  breathPhase=p.state; breathCount=p.dur;
+  updateOrbState(); setPhaseUI(p.name,breathCount);
   breathInterval=setInterval(()=>{
     breathCount--;
-    setPhaseUI(p.name, breathCount);
+    setPhaseUI(p.name,breathCount);
     if(breathCount<=0){
       clearInterval(breathInterval);
       phaseIdx=(phaseIdx+1)%phases.length;
@@ -521,73 +502,148 @@ function runBreath(){
     }
   },1000);
 }
-
-function stopBreath(){
-  clearInterval(breathInterval);
-  breathInterval=null;
-}
-
+function stopBreath(){ clearInterval(breathInterval); breathInterval=null; }
 function setPhaseUI(name,count){
   const pn=document.getElementById('phase-name');
   const pc=document.getElementById('phase-count');
   if(pn) pn.textContent=name;
   if(pc) pc.textContent=count;
 }
-
 function updateOrbState(){
   const orb=document.getElementById('orb');
-  if(!orb) return;
-  orb.className='orb '+breathPhase;
+  if(orb) orb.className='orb '+breathPhase;
 }
 
 /* ═══════════════════════════════════════════
-   WAVEFORM ANIMATOR
+   STEP COUNTDOWN TIMER
+═══════════════════════════════════════════ */
+let countdownInterval=null, countdownSecs=0;
+
+function startCountdown(totalSecs, onDone){
+  clearInterval(countdownInterval);
+  countdownSecs=totalSecs;
+  updateCountdownUI();
+  countdownInterval=setInterval(()=>{
+    countdownSecs--;
+    updateCountdownUI();
+    if(countdownSecs<=0){
+      clearInterval(countdownInterval);
+      Audio.ringBell();
+      setTimeout(()=>{ if(onDone) onDone(); },1200);
+    }
+  },1000);
+}
+
+function stopCountdown(){ clearInterval(countdownInterval); countdownInterval=null; }
+
+function updateCountdownUI(){
+  const el=document.getElementById('step-timer');
+  if(!el) return;
+  const m=Math.floor(countdownSecs/60);
+  const s=countdownSecs%60;
+  el.textContent=`${m}:${s.toString().padStart(2,'0')}`;
+  // arc progress
+  const arc=document.getElementById('timer-arc');
+  if(arc && countdownSecs>=0){
+    const total=parseInt(arc.dataset.total)||1;
+    const pct=(countdownSecs/total);
+    const r=44, circ=2*Math.PI*r;
+    arc.style.strokeDashoffset=(circ*pct).toFixed(1);
+  }
+}
+
+function fmtMins(secs){ return Math.round(secs/60)||1; }
+
+/* ═══════════════════════════════════════════
+   WAVEFORM
 ═══════════════════════════════════════════ */
 function makeWaveform(){
-  const heights=[10,6,13,5,11,8,14,6,9,5,12,7];
-  return heights.map((h,i)=>{
-    const dur=(.4+i*.07).toFixed(2);
-    const delay=(i*.06).toFixed(2);
-    return `<div class="wb" style="height:${h}px;animation:waveAnim ${dur}s ${delay}s ease-in-out infinite alternate"></div>`;
-  }).join('');
+  return [10,6,13,5,11,8,14,6,9,5,12,7].map((h,i)=>
+    `<div class="wb" style="height:${h}px;animation:waveAnim ${(.4+i*.07).toFixed(2)}s ${(i*.06).toFixed(2)}s ease-in-out infinite alternate"></div>`
+  ).join('');
 }
+
+/* ═══════════════════════════════════════════
+   DURATION PICKER HTML
+═══════════════════════════════════════════ */
+function durationPickerHTML(){
+  const opts=DURATION_OPTIONS.map(o=>`
+    <button class="dur-btn${o.mins===selectedMins?'  dur-active':''}"
+      onclick="selectDuration(${o.mins})">${o.label}</button>
+  `).join('');
+  return `
+    <div class="dur-wrap">
+      <div class="dur-label">选择练习时长</div>
+      <div class="dur-grid">${opts}</div>
+      <div id="custom-input" style="display:${selectedMins===null?'flex':'none'};align-items:center;gap:8px;margin-top:10px;justify-content:center">
+        <input type="number" id="custom-mins" min="1" max="60" value="15"
+          style="width:60px;padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#e8e4dc;font-size:16px;text-align:center">
+        <span style="font-size:13px;color:rgba(232,228,220,.5)">分钟</span>
+      </div>
+    </div>`;
+}
+
+window.selectDuration=function(mins){
+  selectedMins=mins;
+  const ci=document.getElementById('custom-input');
+  if(ci) ci.style.display=mins===null?'flex':'none';
+  document.querySelectorAll('.dur-btn').forEach(b=>{
+    b.classList.toggle('dur-active', b.textContent.trim()===DURATION_OPTIONS.find(o=>o.mins===mins)?.label);
+  });
+};
 
 /* ═══════════════════════════════════════════
    RENDER STEP
 ═══════════════════════════════════════════ */
-let currentStep=0, audioMuted=false;
+let currentStep=0, audioMuted=false, sessionStartTime=0;
 
 function render(idx){
-  stopBreath();
+  stopBreath(); stopCountdown();
   currentStep=idx;
   const s=STEPS[idx];
   setHue(s.hue);
 
-  // dots
+  // dots (exclude welcome + done)
+  const practiceSteps=STEPS.filter(x=>!['welcome','done'].includes(x.id));
+  const practiceIdx=practiceSteps.findIndex(x=>x.id===s.id);
   const dotsEl=document.getElementById('dots');
-  dotsEl.innerHTML=STEPS.slice(0,-1).map((_,i)=>{
-    const cl=i<idx?'dot done':i===idx?'dot cur':'dot';
+  dotsEl.innerHTML=practiceSteps.map((_,i)=>{
+    const cl=i<practiceIdx?'dot done':i===practiceIdx?'dot cur':'dot';
     return `<div class="${cl}"></div>`;
   }).join('');
 
-  // sound
-  if(s.sound && !audioMuted){
-    Audio.play(s.sound);
-  } else if(!s.sound){
-    Audio.fadeOut();
-  }
-
-  // bell on key transitions
+  if(s.sound && !audioMuted) Audio.play(s.sound);
+  else if(!s.sound) Audio.fadeOut();
   if(idx===1||idx===5) Audio.ringBell();
 
-  // build stage HTML
+  // compute step durations
+  const totalSecs=(selectedMins||15)*60;
+  const stepDurs=getStepDurations(totalSecs);
+  // map practice step index to duration
+  const stepDurMap={settle:stepDurs[0],breath:stepDurs[1],observe:stepDurs[2],return:stepDurs[3]};
+  const thisDur=stepDurMap[s.id]||0;
+
   let stageHTML='';
 
-  if(s.id==='done'){
-    sessions++; totalMin+=10;
+  if(s.id==='welcome'){
+    stageHTML=`
+      <div class="orb-wrap">
+        <div class="orb-ring"></div><div class="orb-ring"></div>
+        <div class="orb" id="orb" style="background:${s.orbColor};box-shadow:${s.orbShadow}">
+          <div class="orb-label">息</div>
+        </div>
+      </div>
+      <div class="phase-area"></div>
+      <div class="instruction fade-enter">
+        <h2>${s.title}</h2>
+        <p>${s.sub.replace('\n','<br>')}</p>
+      </div>`;
+
+  } else if(s.id==='done'){
+    const elapsed=sessionStartTime?Math.round((Date.now()-sessionStartTime)/60000):selectedMins||10;
+    sessions++; totalMin+=elapsed;
     localStorage.setItem('xi_sessions',sessions);
     localStorage.setItem('xi_minutes',totalMin);
-
     stageHTML=`
       <div class="orb-wrap">
         <div class="orb-ring"></div><div class="orb-ring"></div>
@@ -596,22 +652,32 @@ function render(idx){
         </div>
       </div>
       <div class="phase-area"></div>
-      <div class="instruction fade-enter" style="margin-top:24px">
+      <div class="instruction fade-enter" style="margin-top:20px">
         <h2>很好。</h2>
-        <p>你给了自己一段安静的时光</p>
+        <p>你给了自己 ${elapsed} 分钟安静的时光</p>
       </div>
       <div class="stat-row" style="margin-top:20px">
         <div class="stat"><div class="stat-num">${sessions}</div><div class="stat-label">次练习</div></div>
-        <div class="stat"><div class="stat-num">${totalMin}</div><div class="stat-label">分钟专注</div></div>
-        <div class="stat"><div class="stat-num">${Math.round(sessions/7)||1}</div><div class="stat-label">周连续</div></div>
-      </div>
-    `;
+        <div class="stat"><div class="stat-num">${totalMin}</div><div class="stat-label">累计分钟</div></div>
+        <div class="stat"><div class="stat-num">${Math.ceil(sessions/7)}</div><div class="stat-label">完整周数</div></div>
+      </div>`;
+
   } else {
+    // practice step — with arc timer
+    const arcR=44, arcCirc=(2*Math.PI*arcR).toFixed(1);
     stageHTML=`
-      <div class="orb-wrap">
+      <div class="orb-wrap" style="position:relative">
+        <svg width="200" height="200" style="position:absolute;top:0;left:0;transform:rotate(-90deg)">
+          <circle cx="100" cy="100" r="${arcR}" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="2"/>
+          <circle id="timer-arc" cx="100" cy="100" r="${arcR}" fill="none"
+            stroke="rgba(255,255,255,.22)" stroke-width="2"
+            stroke-dasharray="${arcCirc}" stroke-dashoffset="0"
+            data-total="${thisDur}"
+            style="transition:stroke-dashoffset 1s linear"/>
+        </svg>
         <div class="orb-ring"></div><div class="orb-ring"></div><div class="orb-ring"></div>
-        <div class="orb" id="orb" style="background:${s.orbColor};box-shadow:${s.orbShadow};${s.breathMode?'':''}">
-          <div class="orb-label" id="orb-icon">息</div>
+        <div class="orb" id="orb" style="background:${s.orbColor};box-shadow:${s.orbShadow}">
+          <div class="orb-label" id="step-timer">${fmtMins(thisDur)}:00</div>
         </div>
       </div>
       <div class="phase-area">
@@ -620,52 +686,64 @@ function render(idx){
       </div>
       <div class="instruction fade-enter" style="margin-top:${s.breathMode?'4px':'16px'}">
         <h2>${s.title}</h2>
-        <p>${(s.sub||'').replace('\n','<br>')}</p>
-      </div>
-    `;
+        <p>${s.sub.replace('\n','<br>')}</p>
+      </div>`;
   }
 
   document.getElementById('stage').innerHTML=stageHTML;
 
+  // start timers for practice steps
+  if(!['welcome','done'].includes(s.id) && thisDur>0){
+    if(idx===1) sessionStartTime=Date.now();
+    startCountdown(thisDur, ()=>nextStep());
+  }
   if(s.breathMode) startBreath();
 
   // controls
   let soundLabel='';
-  if(s.sound) soundLabel=Audio.play(s.sound); // get label (already playing)
+  if(s.sound) soundLabel=Audio.play(s.sound);
 
-  const musicHTML = s.sound ? `
+  const musicHTML=s.sound?`
     <div class="music-strip">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(232,228,220,.4)" stroke-width="1.5" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       <span class="music-name">${soundLabel||'环境音乐'}</span>
-      <div class="waveform" style="animation-play-state:${audioMuted?'paused':'running'}">${makeWaveform()}</div>
-    </div>` : '';
+      <div class="waveform">${makeWaveform()}</div>
+    </div>`:'';
 
-  const ghostHTML = s.ghost ? `<button class="btn-ghost" onclick="ghostAction()">${s.ghost}</button>` : '';
+  const durHTML=s.hasDuration?durationPickerHTML():'';
+
+  const ghostHTML=s.ghost?`<button class="btn-ghost" onclick="ghostAction()">${s.ghost}</button>`:'';
 
   document.getElementById('controls-area').innerHTML=`
     <div class="controls">
+      ${durHTML}
       ${musicHTML}
       <button class="btn-primary" style="background:${s.btnGrad}" onclick="nextStep()">${s.btn}</button>
       ${ghostHTML}
-    </div>
-  `;
+    </div>`;
 }
 
 function nextStep(){
-  if(currentStep<STEPS.length-1) render(currentStep+1);
-  else render(0);
+  if(currentStep<STEPS.length-1){
+    // read custom duration if set
+    if(selectedMins===null){
+      const v=parseInt(document.getElementById('custom-mins')?.value)||15;
+      selectedMins=Math.min(60,Math.max(1,v));
+    }
+    render(currentStep+1);
+  } else { render(0); }
 }
 
 function ghostAction(){
   const s=STEPS[currentStep];
-  if(s.ghost==='跳过') render(currentStep+1);
+  if(s.ghost==='跳过'){ stopCountdown(); render(currentStep+1); }
   else if(s.ghost==='暂停音频'){
     audioMuted=!audioMuted;
     if(audioMuted) Audio.stop();
     else if(s.sound) Audio.play(s.sound);
   } else if(s.ghost==='分享给朋友'){
     if(navigator.share){
-      navigator.share({title:'息 · 正念冥想',text:'我刚刚完成了一次正念冥想练习 🌿',url:location.href});
+      navigator.share({title:'息 · 正念冥想',text:`我刚刚完成了 ${selectedMins||10} 分钟正念冥想 🌿`,url:location.href});
     } else {
       navigator.clipboard?.writeText(location.href);
       alert('链接已复制，分享给朋友吧');
@@ -679,24 +757,29 @@ function ghostAction(){
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt',e=>{
   e.preventDefault(); deferredPrompt=e;
-  setTimeout(()=>{
-    document.getElementById('install-banner').style.display='flex';
-  },8000);
+  setTimeout(()=>{ document.getElementById('install-banner').style.display='flex'; },8000);
 });
 document.getElementById('btn-install').onclick=()=>{
-  if(deferredPrompt){ deferredPrompt.prompt(); }
+  if(deferredPrompt) deferredPrompt.prompt();
   document.getElementById('install-banner').style.display='none';
 };
 document.getElementById('btn-dismiss').onclick=()=>{
   document.getElementById('install-banner').style.display='none';
 };
 
-/* css anim for waveform bars */
-const waveStyle=document.createElement('style');
-waveStyle.textContent='@keyframes waveAnim{from{height:3px}to{height:var(--h,12px)}}';
-document.head.appendChild(waveStyle);
+/* extra styles */
+const xStyle=document.createElement('style');
+xStyle.textContent=`
+@keyframes waveAnim{from{height:3px}to{height:var(--h,12px)}}
+.dur-wrap{width:100%;text-align:center;margin-bottom:4px}
+.dur-label{font-size:11px;letter-spacing:.12em;color:rgba(232,228,220,.4);margin-bottom:10px}
+.dur-grid{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.dur-btn{font-size:13px;padding:7px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(232,228,220,.55);cursor:pointer;transition:all .2s;letter-spacing:.04em}
+.dur-btn:hover{border-color:rgba(255,255,255,.35);color:rgba(232,228,220,.9)}
+.dur-active{border-color:rgba(125,184,164,.7)!important;color:#7db8a4!important;background:rgba(125,184,164,.08)!important}
+`;
+document.head.appendChild(xStyle);
 
-/* kick off */
 render(0);
 </script>
 </body>
