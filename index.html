@@ -9,102 +9,256 @@
 <title>息 · 正念冥想</title>
 <link rel="manifest" href="manifest.json">
 <style>
-:root {
-  --ink: #e8e4dc;
-  --ink2: rgba(232,228,220,.5);
-  --ink3: rgba(232,228,220,.25);
-  --accent: #7db8a4;
-  --accent2: #a08bc8;
-  --deep: #080c14;
-  --ease: cubic-bezier(.4,0,.2,1);
+:root{
+  --ink:#e8e4dc;
+  --ink2:rgba(232,228,220,.5);
+  --ink3:rgba(232,228,220,.18);
+  --accent:#7db8a4;
+  --deep:#080c14;
+  --ease:cubic-bezier(.4,0,.2,1);
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
 }
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;overflow:hidden;background:var(--deep);font-family:'PingFang SC','Helvetica Neue',sans-serif}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+html{height:100%;height:-webkit-fill-available}
+body{
+  height:100%;height:-webkit-fill-available;
+  overflow:hidden;background:var(--deep);
+  font-family:'PingFang SC','Noto Sans SC','Helvetica Neue',sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
 
-/* ─── canvas bg ─── */
+/* ─── canvas ─── */
 #canvas{position:fixed;inset:0;z-index:0}
 
-/* ─── app shell ─── */
-#app{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:env(safe-area-inset-top,24px) 28px env(safe-area-inset-bottom,32px)}
+/* ─── shell：三段式布局 ─── */
+#app{
+  position:relative;z-index:1;
+  height:100%;height:-webkit-fill-available;
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+  padding:
+    calc(var(--safe-top) + 14px) 24px
+    calc(var(--safe-bot) + 16px);
+  max-width:480px;margin:0 auto;width:100%;
+}
 
-/* ─── header ─── */
-.header{width:100%;display:flex;align-items:center;justify-content:space-between;padding-top:8px}
-.logo{font-size:22px;font-weight:300;letter-spacing:.15em;color:var(--ink)}
-.session-badge{font-size:11px;letter-spacing:.12em;color:var(--ink2);border:1px solid var(--ink3);border-radius:20px;padding:4px 12px}
+/* ─── 顶栏 ─── */
+.header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding-bottom:10px;
+}
+.logo{font-size:20px;font-weight:300;letter-spacing:.18em;color:var(--ink)}
+.header-right{display:flex;align-items:center;gap:10px}
+.session-badge{
+  font-size:11px;letter-spacing:.1em;color:var(--ink2);
+  border:1px solid var(--ink3);border-radius:20px;padding:4px 11px;
+}
+.dots{display:flex;gap:6px;align-items:center}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--ink3);transition:all .35s var(--ease)}
+.dot.cur{background:var(--accent);width:16px;border-radius:3px}
+.dot.done{background:rgba(232,228,220,.35)}
 
-/* ─── step dots ─── */
-.dots{display:flex;gap:7px;align-items:center}
-.dot{width:5px;height:5px;border-radius:50%;background:var(--ink3);transition:all .4s var(--ease)}
-.dot.cur{background:var(--accent);width:18px;border-radius:3px}
-.dot.done{background:var(--ink2)}
+/* ─── 中央舞台 ─── */
+.stage{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:0;
+  overflow:hidden;
+}
 
-/* ─── center stage ─── */
-.stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;width:100%}
-
-/* ─── orb ─── */
-.orb-wrap{position:relative;width:200px;height:200px;display:flex;align-items:center;justify-content:center}
-.orb-ring{position:absolute;border-radius:50%;border:1px solid rgba(125,184,164,.15);animation:ripple 3.5s ease-out infinite}
-.orb-ring:nth-child(1){width:200px;height:200px;animation-delay:0s}
-.orb-ring:nth-child(2){width:160px;height:160px;animation-delay:1.1s}
-.orb-ring:nth-child(3){width:120px;height:120px;animation-delay:2.2s}
+/* ─── 呼吸球 ─── */
+.orb-wrap{
+  position:relative;
+  width:min(52vw,200px);height:min(52vw,200px);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.orb-ring{
+  position:absolute;border-radius:50%;
+  border:1px solid rgba(125,184,164,.13);
+  animation:ripple 3.5s ease-out infinite;
+}
+.orb-ring:nth-child(1){width:100%;height:100%;animation-delay:0s}
+.orb-ring:nth-child(2){width:80%;height:80%;animation-delay:1.1s}
+.orb-ring:nth-child(3){width:60%;height:60%;animation-delay:2.2s}
 @keyframes ripple{0%{opacity:.5;transform:scale(.85)}100%{opacity:0;transform:scale(1.1)}}
-.orb{width:88px;height:88px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform 1s var(--ease),background .8s,box-shadow .8s;position:relative;z-index:1}
-.orb-label{font-size:12px;letter-spacing:.1em;color:rgba(232,228,220,.7);font-weight:300}
-
-/* breath states */
-.orb.inhale{transform:scale(1.5);animation:none}
+.orb{
+  width:44%;height:44%;border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transition:transform 1s var(--ease),background .8s,box-shadow .8s;
+  position:relative;z-index:1;gap:2px;
+}
+.orb-label{font-size:11px;letter-spacing:.08em;color:rgba(232,228,220,.65);font-weight:300}
+.orb.inhale{transform:scale(1.5)}
 .orb.hold{transform:scale(1.5)}
-.orb.exhale{transform:scale(1);animation:none}
+.orb.exhale{transform:scale(1)}
 
-/* ─── phase text ─── */
-.phase-area{margin-top:20px;text-align:center;min-height:52px;display:flex;flex-direction:column;align-items:center;gap:6px}
-.phase-name{font-size:13px;letter-spacing:.18em;color:var(--ink2);text-transform:uppercase;font-weight:300}
-.phase-count{font-size:36px;font-weight:200;color:var(--ink);letter-spacing:-.01em;min-width:48px;text-align:center;line-height:1}
+/* ─── 呼吸相位文字 ─── */
+.phase-area{
+  margin-top:clamp(10px,3vw,18px);
+  text-align:center;min-height:48px;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+}
+.phase-name{font-size:12px;letter-spacing:.16em;color:var(--ink2);font-weight:300}
+.phase-count{font-size:clamp(28px,8vw,38px);font-weight:200;color:var(--ink);line-height:1}
 
-/* ─── instruction ─── */
-.instruction{text-align:center;max-width:280px}
-.instruction h2{font-size:22px;font-weight:300;color:var(--ink);letter-spacing:.04em;margin-bottom:10px;line-height:1.35}
-.instruction p{font-size:14px;color:var(--ink2);line-height:1.75;font-weight:300}
+/* ─── 引导文字 ─── */
+.instruction{
+  text-align:center;
+  padding:0 8px;
+  margin-top:clamp(8px,3vw,16px);
+}
+.instruction h2{
+  font-size:clamp(18px,5vw,22px);font-weight:300;
+  color:var(--ink);letter-spacing:.04em;
+  margin-bottom:8px;line-height:1.3;
+}
+.instruction p{
+  font-size:clamp(13px,3.5vw,14px);
+  color:var(--ink2);line-height:1.7;font-weight:300;
+}
 
-/* ─── music strip ─── */
-.music-strip{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:10px 16px;width:100%;max-width:320px}
-.music-name{font-size:12px;color:var(--ink2);flex:1;letter-spacing:.04em}
-.waveform{display:flex;align-items:flex-end;gap:2px;height:16px}
-.wb{width:3px;border-radius:2px;background:var(--accent);opacity:.6}
+/* ─── 底部控制区 ─── */
+#controls-area{width:100%}
+.controls{
+  width:100%;display:flex;flex-direction:column;
+  gap:10px;align-items:stretch;
+}
 
-/* ─── controls ─── */
-.controls{width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px;align-items:center}
-.btn-primary{width:100%;padding:17px;border-radius:16px;border:none;font-size:16px;font-weight:400;letter-spacing:.08em;cursor:pointer;color:#fff;transition:opacity .2s,transform .1s;position:relative;overflow:hidden}
+/* ─── 选择器行（时长 + 呼吸节律）─── */
+.picker-row{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.picker-block{
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--ink3);border-radius:14px;
+  padding:10px 12px;
+}
+.picker-label{
+  font-size:10px;letter-spacing:.12em;color:var(--ink2);
+  margin-bottom:7px;
+}
+.picker-opts{display:flex;flex-wrap:wrap;gap:5px}
+.popt{
+  font-size:12px;padding:5px 10px;border-radius:999px;
+  border:1px solid var(--ink3);background:transparent;
+  color:var(--ink2);cursor:pointer;transition:all .2s;
+  white-space:nowrap;
+}
+.popt:active{transform:scale(.95)}
+.popt.active{
+  border-color:rgba(125,184,164,.7);
+  color:var(--accent);background:rgba(125,184,164,.1);
+}
+.popt-lg{font-size:12px;padding:6px 10px;width:100%}
+
+/* 自定义时长输入 */
+.custom-row{
+  display:none;align-items:center;gap:6px;margin-top:6px;
+}
+.custom-row.show{display:flex}
+.custom-row input{
+  width:52px;padding:5px 8px;border-radius:8px;
+  border:1px solid var(--ink3);background:rgba(255,255,255,.06);
+  color:var(--ink);font-size:14px;text-align:center;
+}
+.custom-row span{font-size:12px;color:var(--ink2)}
+
+/* ─── 控制条（音乐/语音）─── */
+.ctrl-strip{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--ink3);border-radius:12px;
+  padding:10px 14px;
+}
+.ctrl-label{font-size:12px;color:var(--ink2);flex:1;letter-spacing:.03em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ctrl-btn{
+  background:transparent;border:1px solid rgba(255,255,255,.15);
+  border-radius:8px;color:var(--ink2);font-size:11px;
+  padding:4px 10px;cursor:pointer;transition:all .2s;white-space:nowrap;
+  flex-shrink:0;
+}
+.ctrl-btn.on{
+  border-color:rgba(125,184,164,.6);
+  color:var(--accent);background:rgba(125,184,164,.08);
+}
+.waveform{display:flex;align-items:flex-end;gap:2px;height:14px;flex-shrink:0}
+.wb{width:3px;border-radius:2px;background:var(--accent);opacity:.55}
+.voice-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--accent);opacity:0;transition:opacity .3s;flex-shrink:0;
+}
+.voice-dot.active{opacity:1;animation:vPulse 1.2s ease-in-out infinite}
+@keyframes vPulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.7);opacity:1}}
+
+/* ─── 主按钮（拇指友好，56px高）─── */
+.btn-primary{
+  width:100%;height:56px;border-radius:18px;border:none;
+  font-size:16px;font-weight:400;letter-spacing:.06em;
+  cursor:pointer;color:#fff;
+  transition:opacity .2s,transform .12s;
+  -webkit-appearance:none;
+}
 .btn-primary:active{transform:scale(.97);opacity:.85}
-.btn-ghost{background:transparent;border:1px solid var(--ink3);color:var(--ink2);width:100%;padding:13px;border-radius:14px;font-size:13px;letter-spacing:.06em;cursor:pointer;transition:border-color .2s,color .2s}
-.btn-ghost:hover{border-color:var(--ink2);color:var(--ink)}
 
-/* ─── transitions ─── */
-.fade-enter{animation:fadeUp .5s var(--ease) both}
-@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+/* ─── 次要按钮 ─── */
+.btn-ghost{
+  background:transparent;border:1px solid var(--ink3);
+  color:var(--ink2);width:100%;height:46px;
+  border-radius:14px;font-size:13px;letter-spacing:.05em;
+  cursor:pointer;transition:all .2s;
+}
+.btn-ghost:active{background:rgba(255,255,255,.05)}
 
-/* ─── completion screen ─── */
-.stat-row{display:flex;gap:24px;justify-content:center;margin:8px 0}
-.stat{text-align:center}
-.stat-num{font-size:32px;font-weight:200;color:var(--ink)}
-.stat-label{font-size:11px;letter-spacing:.12em;color:var(--ink2);margin-top:2px}
+/* ─── 完成统计 ─── */
+.stat-row{display:flex;gap:0;justify-content:center;margin:12px 0;width:100%}
+.stat{
+  flex:1;text-align:center;
+  border-right:1px solid var(--ink3);
+}
+.stat:last-child{border-right:none}
+.stat-num{font-size:clamp(26px,7vw,34px);font-weight:200;color:var(--ink)}
+.stat-label{font-size:10px;letter-spacing:.1em;color:var(--ink2);margin-top:2px}
 
 /* ─── install banner ─── */
-#install-banner{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(8,12,20,.95);border-top:1px solid rgba(255,255,255,.08);padding:16px 24px;z-index:99;flex-direction:column;gap:8px}
+#install-banner{
+  display:none;position:fixed;
+  bottom:0;left:0;right:0;
+  background:rgba(8,12,20,.96);
+  border-top:1px solid rgba(255,255,255,.08);
+  padding:16px 24px calc(var(--safe-bot) + 16px);
+  z-index:99;flex-direction:column;gap:10px;
+}
 #install-banner p{font-size:13px;color:var(--ink2);line-height:1.5}
 #install-banner strong{color:var(--ink)}
 .banner-row{display:flex;gap:10px}
-.btn-install{flex:1;padding:11px;border-radius:12px;border:none;font-size:14px;cursor:pointer;background:var(--accent);color:#fff;letter-spacing:.04em}
-.btn-dismiss{flex:1;padding:11px;border-radius:12px;border:1px solid var(--ink3);background:transparent;color:var(--ink2);font-size:14px;cursor:pointer}
+.btn-install{
+  flex:1;height:46px;border-radius:12px;border:none;
+  font-size:14px;cursor:pointer;background:var(--accent);color:#fff;
+}
+.btn-dismiss{
+  flex:1;height:46px;border-radius:12px;
+  border:1px solid var(--ink3);background:transparent;
+  color:var(--ink2);font-size:14px;cursor:pointer;
+}
 
-/* ─── voice bar ─── */
-.voice-bar{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:10px 16px;width:100%;max-width:320px}
-.voice-label{font-size:12px;color:var(--ink2);flex:1;letter-spacing:.04em}
-.voice-toggle{background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:8px;color:var(--ink2);font-size:12px;padding:4px 10px;cursor:pointer;letter-spacing:.04em;transition:all .2s;white-space:nowrap}
-.voice-toggle.on{border-color:rgba(125,184,164,.6);color:var(--accent);background:rgba(125,184,164,.08)}
-.voice-ripple{width:8px;height:8px;border-radius:50%;background:var(--accent);opacity:0;transition:opacity .3s}
-.voice-ripple.active{opacity:1;animation:voicePulse 1.2s ease-in-out infinite}
-@keyframes voicePulse{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.6);opacity:1}}
+/* ─── 动画 ─── */
+.fade-enter{animation:fadeUp .45s var(--ease) both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* ─── 小屏适配（iPhone SE等，高度<680px）─── */
+@media(max-height:680px){
+  .orb-wrap{width:min(42vw,160px);height:min(42vw,160px)}
+  .phase-area{min-height:40px;margin-top:8px}
+  .instruction{margin-top:6px}
+  .instruction h2{font-size:17px;margin-bottom:5px}
+  .controls{gap:7px}
+  .btn-primary{height:50px}
+  .picker-block{padding:8px 10px}
+}
+
 /* ─── reduced motion ─── */
 @media(prefers-reduced-motion:reduce){
   .orb-ring,.wb{animation:none!important}
@@ -117,9 +271,11 @@ html,body{height:100%;overflow:hidden;background:var(--deep);font-family:'PingFa
 <div id="app">
   <div class="header">
     <div class="logo">息</div>
-    <div class="session-badge" id="session-badge">第 1 次练习</div>
+    <div class="header-right">
+      <div class="dots" id="dots"></div>
+      <div class="session-badge" id="session-badge">第 1 次</div>
+    </div>
   </div>
-  <div class="dots" id="dots"></div>
   <div class="stage" id="stage"></div>
   <div id="controls-area"></div>
 </div>
@@ -655,7 +811,7 @@ const Voice = (function(){
     const r=document.getElementById('voice-ripple');
     if(r) r.classList.toggle('active', active);
     const lbl=document.getElementById('voice-status');
-    if(lbl) lbl.textContent = active ? '正在播报' : (enabled ? '语音开启' : '语音关闭');
+    if(lbl) lbl.textContent = active ? '正在播报' : (enabled ? '语音引导开启' : '语音引导关闭');
   }
 
   let scriptTimers=[];
@@ -893,19 +1049,27 @@ function makeWaveform(){
 /* ═══════════════════════════════════════════
    DURATION PICKER HTML
 ═══════════════════════════════════════════ */
-function durationPickerHTML(){
-  const opts=DURATION_OPTIONS.map(o=>`
-    <button class="dur-btn${o.mins===selectedMins?'  dur-active':''}"
-      onclick="selectDuration(${o.mins})">${o.label}</button>
+function pickerHTML(){
+  const durOpts=DURATION_OPTIONS.map(o=>`
+    <button class="popt${o.mins===selectedMins?' active':''}" onclick="selectDuration(${o.mins})">${o.label}</button>
+  `).join('');
+  const patOpts=Object.entries(BREATH_PATTERNS).map(([k,p])=>`
+    <button class="popt popt-lg${selectedPattern===k?' active':''}" onclick="selectPattern('${k}')">${k}</button>
   `).join('');
   return `
-    <div class="dur-wrap">
-      <div class="dur-label">选择练习时长</div>
-      <div class="dur-grid">${opts}</div>
-      <div id="custom-input" style="display:${selectedMins===null?'flex':'none'};align-items:center;gap:8px;margin-top:10px;justify-content:center">
-        <input type="number" id="custom-mins" min="1" max="60" value="15"
-          style="width:60px;padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#e8e4dc;font-size:16px;text-align:center">
-        <span style="font-size:13px;color:rgba(232,228,220,.5)">分钟</span>
+    <div class="picker-row">
+      <div class="picker-block">
+        <div class="picker-label">练习时长</div>
+        <div class="picker-opts">${durOpts}</div>
+        <div class="custom-row${selectedMins===null?' show':''}" id="custom-input">
+          <input type="number" id="custom-mins" min="1" max="60" value="15"
+            style="width:52px;padding:5px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#e8e4dc;font-size:14px;text-align:center">
+          <span style="font-size:12px;color:rgba(232,228,220,.5)">分钟</span>
+        </div>
+      </div>
+      <div class="picker-block">
+        <div class="picker-label">呼吸节律</div>
+        <div class="picker-opts">${patOpts}</div>
       </div>
     </div>`;
 }
@@ -913,34 +1077,20 @@ function durationPickerHTML(){
 window.selectDuration=function(mins){
   selectedMins=mins;
   const ci=document.getElementById('custom-input');
-  if(ci) ci.style.display=mins===null?'flex':'none';
-  document.querySelectorAll('.dur-btn').forEach(b=>{
-    b.classList.toggle('dur-active', b.textContent.trim()===DURATION_OPTIONS.find(o=>o.mins===mins)?.label);
+  if(ci) ci.classList.toggle('show', mins===null);
+  document.querySelectorAll('.popt').forEach(b=>{
+    const label=DURATION_OPTIONS.find(o=>o.mins===mins)?.label;
+    if(label && b.textContent.trim()===label) b.classList.add('active');
+    else if(DURATION_OPTIONS.some(o=>b.textContent.trim()===o.label)) b.classList.remove('active');
   });
 };
-
-function breathPickerHTML(){
-  return `
-    <div class="dur-wrap" style="margin-top:8px">
-      <div class="dur-label">呼吸节律</div>
-      <div class="dur-grid">
-        ${Object.entries(BREATH_PATTERNS).map(([key,p])=>`
-          <button class="dur-btn${selectedPattern===key?' dur-active':''}"
-            onclick="selectPattern('${key}')" style="flex-direction:column;line-height:1.4;padding:8px 14px">
-            <span style="font-size:13px">${key}</span>
-            <span style="font-size:10px;opacity:.7">${p.desc}</span>
-          </button>`).join('')}
-      </div>
-    </div>`;
-}
 
 window.selectPattern=function(key){
   selectedPattern=key;
   phases=BREATH_PATTERNS[key].phases;
-  document.querySelectorAll('.pattern-btn').forEach(b=>b.classList.remove('dur-active'));
-  document.querySelectorAll('.dur-btn').forEach(b=>{
-    if(Object.keys(BREATH_PATTERNS).some(k=>b.textContent.includes(k))){
-      b.classList.toggle('dur-active', b.textContent.includes(key));
+  document.querySelectorAll('.popt').forEach(b=>{
+    if(Object.keys(BREATH_PATTERNS).includes(b.textContent.trim())){
+      b.classList.toggle('active', b.textContent.trim()===key);
     }
   });
 };
@@ -1074,21 +1224,31 @@ function render(idx){
 
   const ghostHTML=s.ghost?`<button class="btn-ghost" onclick="ghostAction()">${s.ghost}</button>`:'';
 
+  const pickHTML=s.hasDuration?pickerHTML():'';
+
+  const musicHTML=s.sound?`
+    <div class="ctrl-strip">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(232,228,220,.4)" stroke-width="1.5" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      <span class="ctrl-label">music · 冥想音乐</span>
+      <div class="waveform">${makeWaveform()}</div>
+    </div>`:'';
+
   const voiceHTML=`
-    <div class="voice-bar">
-      <div id="voice-ripple" class="voice-ripple"></div>
-      <span class="voice-label" id="voice-status">${Voice.enabled?'语音开启':'语音关闭'}</span>
-      <button class="voice-toggle${Voice.enabled?' on':''}" id="voice-btn" onclick="toggleVoice()">
-        ${Voice.enabled?'🔈 关闭':'🔇 开启'}
+    <div class="ctrl-strip">
+      <div class="voice-dot${Voice.speaking?' active':''}" id="voice-ripple"></div>
+      <span class="ctrl-label" id="voice-status">${Voice.enabled?'语音引导开启':'语音引导关闭'}</span>
+      <button class="ctrl-btn${Voice.enabled?' on':''}" id="voice-btn" onclick="toggleVoice()">
+        ${Voice.enabled?'关闭':'开启'}
       </button>
     </div>`;
 
+  const ghostHTML=s.ghost?`<button class="btn-ghost" onclick="ghostAction()">${s.ghost}</button>`:'';
+
   document.getElementById('controls-area').innerHTML=`
     <div class="controls">
-      ${durHTML}
-      ${breathPickHTML}
-      ${voiceHTML}
+      ${pickHTML}
       ${musicHTML}
+      ${voiceHTML}
       <button class="btn-primary" style="background:${s.btnGrad}" onclick="nextStep()">${s.btn}</button>
       ${ghostHTML}
     </div>`;
@@ -1126,8 +1286,8 @@ function toggleVoice(){
   const on=Voice.toggle();
   const btn=document.getElementById('voice-btn');
   const lbl=document.getElementById('voice-status');
-  if(btn){ btn.textContent=on?'🔈 关闭':'🔇 开启'; btn.classList.toggle('on',on); }
-  if(lbl) lbl.textContent=on?'语音开启':'语音关闭';
+  if(btn){ btn.textContent=on?'关闭':'开启'; btn.classList.toggle('on',on); }
+  if(lbl) lbl.textContent=on?'语音引导开启':'语音引导关闭';
   if(on) Voice.runScript(STEPS[currentStep].id);
 }
 
@@ -1149,15 +1309,7 @@ document.getElementById('btn-dismiss').onclick=()=>{
 
 /* extra styles */
 const xStyle=document.createElement('style');
-xStyle.textContent=`
-@keyframes waveAnim{from{height:3px}to{height:var(--h,12px)}}
-.dur-wrap{width:100%;text-align:center;margin-bottom:4px}
-.dur-label{font-size:11px;letter-spacing:.12em;color:rgba(232,228,220,.4);margin-bottom:10px}
-.dur-grid{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
-.dur-btn{font-size:13px;padding:7px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(232,228,220,.55);cursor:pointer;transition:all .2s;letter-spacing:.04em}
-.dur-btn:hover{border-color:rgba(255,255,255,.35);color:rgba(232,228,220,.9)}
-.dur-active{border-color:rgba(125,184,164,.7)!important;color:#7db8a4!important;background:rgba(125,184,164,.08)!important}
-`;
+xStyle.textContent='@keyframes waveAnim{from{height:3px}to{height:var(--h,12px)}}';
 document.head.appendChild(xStyle);
 
 Voice.init();
