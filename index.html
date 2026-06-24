@@ -176,7 +176,8 @@ html,body{height:100%;overflow:hidden;background:var(--deep);font-family:'PingFa
 })();
 
 /* ═══════════════════════════════════════════
-   WEB AUDIO ENGINE — 纯自然声版
+   WEB AUDIO ENGINE — 增强自然声版
+   更清脆水声 · 丰富鸟鸣 · 多层次自然环境
 ═══════════════════════════════════════════ */
 const Audio = (function(){
   let ctx, nodes={}, timers=[];
@@ -186,16 +187,16 @@ const Audio = (function(){
     if(ctx.state==='suspended') ctx.resume();
   }
 
-  /* ── 基础噪声生成器 ── */
+  /* ── 双声道噪声（立体声更自然）── */
   function mkNoise(type, seconds){
-    seconds=seconds||4;
+    seconds=seconds||6;
     const rate=ctx.sampleRate;
     const buf=ctx.createBuffer(2,rate*seconds,rate);
     for(let ch=0;ch<2;ch++){
       const d=buf.getChannelData(ch);
       let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0,last=0;
       for(let i=0;i<d.length;i++){
-        const w=Math.random()*2-1;
+        const w=Math.random()*2-1+(ch===1?Math.random()*.02-.01:0);
         if(type==='pink'){
           b0=.99886*b0+w*.0555179; b1=.99332*b1+w*.0750759;
           b2=.96900*b2+w*.1538520; b3=.86650*b3+w*.3104856;
@@ -210,7 +211,7 @@ const Audio = (function(){
     src.buffer=buf; src.loop=true; return src;
   }
 
-  /* ── 通用滤波链 ── */
+  /* ── 滤波链 ── */
   function chain(src, filters, gainVal){
     let node=src;
     filters.forEach(f=>{ node.connect(f); node=f; });
@@ -220,7 +221,19 @@ const Audio = (function(){
     return g;
   }
 
-  /* ── LFO调制 ── */
+  /* ── 独立增益节点（多层叠加）── */
+  function addLayer(src, filters, gainVal, key){
+    let node=src;
+    filters.forEach(f=>{ node.connect(f); node=f; });
+    const g=ctx.createGain(); g.gain.value=gainVal;
+    node.connect(g); g.connect(ctx.destination);
+    src.start();
+    nodes[key||('layer_'+Date.now())]=src;
+    nodes[(key||'layer')+'_gain']=g;
+    return g;
+  }
+
+  /* ── LFO ── */
   function lfo(target, rate, depth){
     const o=ctx.createOscillator(), g=ctx.createGain();
     o.frequency.value=rate; g.gain.value=depth;
@@ -228,178 +241,275 @@ const Audio = (function(){
     nodes['lfo_'+Date.now()]=o; return o;
   }
 
-  /* ── 单音滴水 ── */
-  function droplet(freq, delay, dur){
-    const osc=ctx.createOscillator(), env=ctx.createGain();
-    osc.type='sine'; osc.frequency.value=freq;
-    const t=ctx.currentTime+delay;
-    env.gain.setValueAtTime(0,t);
-    env.gain.linearRampToValueAtTime(.06,t+.01);
-    env.gain.exponentialRampToValueAtTime(.0001,t+dur);
-    osc.connect(env); env.connect(ctx.destination);
-    osc.start(t); osc.stop(t+dur+.05);
+  /* ── 清脆水滴（多谐波）── */
+  function droplet(freq, delay, vol){
+    vol=vol||.07;
+    // 基音
+    [1, 1.5, 2.3].forEach((mult,i)=>{
+      const osc=ctx.createOscillator(), env=ctx.createGain();
+      osc.type='sine'; osc.frequency.value=freq*mult;
+      const t=ctx.currentTime+delay;
+      const pk=vol/(i+1);
+      env.gain.setValueAtTime(0,t);
+      env.gain.linearRampToValueAtTime(pk,t+.008);
+      env.gain.exponentialRampToValueAtTime(.0001,t+.5+i*.15);
+      osc.connect(env); env.connect(ctx.destination);
+      osc.start(t); osc.stop(t+.7+i*.2);
+    });
+    // 水花噪声瞬态
+    const nb=ctx.createBuffer(1,ctx.sampleRate*.04,ctx.sampleRate);
+    const nd=nb.getChannelData(0);
+    for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;
+    const ns=ctx.createBufferSource(); ns.buffer=nb;
+    const nf=ctx.createBiquadFilter(); nf.type='bandpass'; nf.frequency.value=freq*1.8; nf.Q.value=2;
+    const ng=ctx.createGain(); ng.gain.value=vol*.4;
+    ns.connect(nf); nf.connect(ng); ng.connect(ctx.destination);
+    ns.start(ctx.currentTime+delay);
   }
 
-  /* ── 随机水滴序列 ── */
-  function startDroplets(minF,maxF,minI,maxI){
+  /* ── 水滴序列 ── */
+  function startDroplets(minF,maxF,minI,maxI,vol){
     function sched(){
-      const freq=minF+Math.random()*(maxF-minF);
-      const interval=(minI+Math.random()*(maxI-minI))/1000;
-      droplet(freq,0,.6+Math.random()*.8);
-      const t=setTimeout(sched,(minI+Math.random()*(maxI-minI)));
-      timers.push(t);
+      droplet(minF+Math.random()*(maxF-minF), 0, vol||.07);
+      timers.push(setTimeout(sched, minI+Math.random()*(maxI-minI)));
     }
-    sched();
+    timers.push(setTimeout(sched, Math.random()*minI));
   }
 
-  /* ── 鸟鸣合成（频率调制）── */
-  function chirp(baseFreq, delay){
-    const mod=ctx.createOscillator(), modG=ctx.createGain();
-    const car=ctx.createOscillator(), env=ctx.createGain();
-    mod.frequency.value=12; modG.gain.value=baseFreq*.3;
-    car.frequency.value=baseFreq; car.type='sine';
-    mod.connect(modG); modG.connect(car.frequency);
-    car.connect(env); env.connect(ctx.destination);
+  /* ── 增强鸟鸣（多音节、颤音、滑音）── */
+  function chirp(baseFreq, delay, style){
+    style=style||'simple';
+    const out=ctx.createGain(); out.gain.value=.06; out.connect(ctx.destination);
+
+    function note(freq, t, dur, glide){
+      const car=ctx.createOscillator(), env=ctx.createGain();
+      car.type='sine';
+      car.frequency.setValueAtTime(freq,t);
+      if(glide) car.frequency.exponentialRampToValueAtTime(glide,t+dur*.8);
+      env.gain.setValueAtTime(0,t);
+      env.gain.linearRampToValueAtTime(1,t+.02);
+      env.gain.setValueAtTime(1,t+dur-.03);
+      env.gain.exponentialRampToValueAtTime(.0001,t+dur);
+      // 颤音 LFO
+      const vib=ctx.createOscillator(), vibG=ctx.createGain();
+      vib.frequency.value=8+Math.random()*4; vibG.gain.value=freq*.015;
+      vib.connect(vibG); vibG.connect(car.frequency);
+      car.connect(env); env.connect(out);
+      car.start(t); car.stop(t+dur+.05);
+      vib.start(t); vib.stop(t+dur+.05);
+    }
+
     const t=ctx.currentTime+delay;
-    env.gain.setValueAtTime(0,t);
-    env.gain.linearRampToValueAtTime(.04,t+.05);
-    env.gain.exponentialRampToValueAtTime(.0001,t+.35);
-    mod.start(t); car.start(t);
-    mod.stop(t+.4); car.stop(t+.4);
-  }
-
-  /* ── 随机鸟鸣 ── */
-  function startBirds(){
-    const birds=[2800,3200,2400,3600,2600,4000,1800,3000];
-    function sched(){
-      const f=birds[Math.floor(Math.random()*birds.length)];
-      chirp(f,0);
-      if(Math.random()>.5) chirp(f*1.04,.12);
-      if(Math.random()>.7) chirp(f*.96,.24);
-      const wait=2500+Math.random()*5000;
-      timers.push(setTimeout(sched,wait));
+    if(style==='trill'){
+      // 颤鸣：快速交替两音
+      for(let i=0;i<6;i++) note(baseFreq*(i%2?1:1.12), t+i*.06, .08);
+    } else if(style==='slide'){
+      // 滑音：由低到高
+      note(baseFreq*.85, t, .3, baseFreq*1.05);
+    } else if(style==='phrase'){
+      // 三音短句
+      note(baseFreq, t, .18);
+      note(baseFreq*1.15, t+.2, .15);
+      note(baseFreq*.92, t+.38, .25);
+    } else {
+      // 简单单音
+      note(baseFreq, t, .2+Math.random()*.15);
     }
-    timers.push(setTimeout(sched,1000+Math.random()*2000));
   }
 
-  /* ── 雨声 ── */
-  function startRain(intensity){
-    intensity=intensity||1;
-    const pink=mkNoise('pink',4);
-    const hi=ctx.createBiquadFilter(); hi.type='highpass'; hi.frequency.value=1200;
-    const mid=ctx.createBiquadFilter(); mid.type='peaking'; mid.frequency.value=3000; mid.gain.value=6;
-    const lo=ctx.createBiquadFilter(); lo.type='lowpass'; lo.frequency.value=8000;
-    chain(pink,[hi,mid,lo],.12*intensity);
-    // 大雨滴噼啪声
-    const brown=mkNoise('brown',3);
-    const bf=ctx.createBiquadFilter(); bf.type='bandpass'; bf.frequency.value=400; bf.Q.value=.3;
-    const bg=ctx.createGain(); bg.gain.value=.06*intensity;
-    brown.connect(bf); bf.connect(bg); bg.connect(ctx.destination); brown.start();
-    nodes.noiseNode2=brown;
-    // LFO模拟阵雨强弱
-    lfo(nodes.noiseGain.gain,.07,.04*intensity);
+  /* ── 蟋蟀声（高频脉冲）── */
+  function cricket(delay){
+    const rate=80+Math.random()*20;
+    const freq=4200+Math.random()*800;
+    let count=0, maxCount=8+Math.floor(Math.random()*12);
+    function pulse(){
+      if(count++>=maxCount) return;
+      const osc=ctx.createOscillator(), env=ctx.createGain();
+      osc.type='square'; osc.frequency.value=freq;
+      const t=ctx.currentTime+delay/1000;
+      env.gain.setValueAtTime(0,t);
+      env.gain.linearRampToValueAtTime(.018,t+.002);
+      env.gain.exponentialRampToValueAtTime(.0001,t+.025);
+      osc.connect(env); env.connect(ctx.destination);
+      osc.start(t); osc.stop(t+.03);
+      timers.push(setTimeout(pulse, 1000/rate));
+    }
+    pulse();
   }
 
-  /* ── 溪流声 ── */
+  /* ── 丰富鸟鸣调度器 ── */
+  const BIRD_SPECIES=[
+    {freq:2800, style:'trill',  weight:3},
+    {freq:3400, style:'slide',  weight:2},
+    {freq:2200, style:'phrase', weight:2},
+    {freq:4000, style:'simple', weight:2},
+    {freq:1800, style:'phrase', weight:1},
+    {freq:3800, style:'trill',  weight:2},
+    {freq:2600, style:'slide',  weight:2},
+    {freq:3100, style:'phrase', weight:3},
+  ];
+  const BIRD_POOL=[];
+  BIRD_SPECIES.forEach(b=>{ for(let i=0;i<b.weight;i++) BIRD_POOL.push(b); });
+
+  function startBirds(density){
+    density=density||1; // 1=普通, 2=密集
+    const minWait=Math.round(1500/density);
+    const maxWait=Math.round(4000/density);
+
+    function schedBird(){
+      const b=BIRD_POOL[Math.floor(Math.random()*BIRD_POOL.length)];
+      const variation=.88+Math.random()*.24;
+      chirp(b.freq*variation, 0, b.style);
+      // 偶尔加对唱（另一只鸟回应）
+      if(Math.random()<.35){
+        const b2=BIRD_POOL[Math.floor(Math.random()*BIRD_POOL.length)];
+        chirp(b2.freq*(.9+Math.random()*.2), .6+Math.random()*.8, b2.style);
+      }
+      timers.push(setTimeout(schedBird, minWait+Math.random()*(maxWait-minWait)));
+    }
+    // 错开启动，让鸟声从不同方向涌现
+    for(let i=0;i<Math.ceil(density);i++){
+      timers.push(setTimeout(schedBird, i*800+Math.random()*1200));
+    }
+  }
+
+  /* ── 蟋蟀调度器 ── */
+  function startCrickets(){
+    function sched(){
+      cricket(0);
+      timers.push(setTimeout(sched, 3000+Math.random()*6000));
+    }
+    timers.push(setTimeout(sched, 2000+Math.random()*3000));
+  }
+
+  /* ── 山涧溪流（清脆版）── */
   function startStream(){
-    const pink=mkNoise('pink',5);
-    const lo=ctx.createBiquadFilter(); lo.type='lowpass'; lo.frequency.value=2500;
-    const peak=ctx.createBiquadFilter(); peak.type='peaking'; peak.frequency.value=600; peak.gain.value=4;
-    chain(pink,[lo,peak],.2);
-    lfo(nodes.noiseGain.gain,.18,.06);
-    lfo(lo.frequency,.13,400);
-    startDroplets(350,900,800,3000);
+    // 主流水：带通滤波强化中频咕噜声
+    const pink=mkNoise('pink',6);
+    const bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=800; bp.Q.value=.4;
+    const lo=ctx.createBiquadFilter(); lo.type='lowpass'; lo.frequency.value=3500;
+    chain(pink,[bp,lo],.22);
+    lfo(nodes.noiseGain.gain,.2,.07);
+    lfo(bp.frequency,.15,250);
+    // 高频水花层
+    const pink2=mkNoise('pink',4);
+    const hi=ctx.createBiquadFilter(); hi.type='highpass'; hi.frequency.value=3000;
+    const pk=ctx.createBiquadFilter(); pk.type='peaking'; pk.frequency.value=5000; pk.gain.value=5;
+    addLayer(pink2,[hi,pk],.06,'splash');
+    lfo(nodes['splash_gain'].gain,.25,.03);
+    // 清脆水滴：高频短促
+    startDroplets(500,1100,400,1800,.09);
+    // 偶尔大水滴
+    startDroplets(260,420,2500,6000,.12);
+    // 晨鸟点缀
+    startBirds(.8);
   }
 
   /* ── 海浪声 ── */
   function startOcean(){
-    const brown=mkNoise('brown',6);
-    const lo=ctx.createBiquadFilter(); lo.type='lowpass'; lo.frequency.value=700;
-    const peak=ctx.createBiquadFilter(); peak.type='peaking'; peak.frequency.value=200; peak.gain.value=5;
-    chain(brown,[lo,peak],.28);
-    lfo(nodes.noiseGain.gain,.06,.1);
-    lfo(lo.frequency,.05,200);
-    // 浪花高频
-    const white=mkNoise('pink',3);
-    const hf=ctx.createBiquadFilter(); hf.type='highpass'; hf.frequency.value=3000;
-    const hg=ctx.createGain(); hg.gain.value=.05;
-    const hlfo=ctx.createOscillator(), hlfoG=ctx.createGain();
-    hlfo.frequency.value=.08; hlfoG.gain.value=.04;
-    hlfo.connect(hlfoG); hlfoG.connect(hg.gain);
-    white.connect(hf); hf.connect(hg); hg.connect(ctx.destination);
-    white.start(); hlfo.start();
-    nodes.noiseNode2=white; nodes.lfo2=hlfo;
+    const brown=mkNoise('brown',8);
+    const lo=ctx.createBiquadFilter(); lo.type='lowpass'; lo.frequency.value=650;
+    const pk=ctx.createBiquadFilter(); pk.type='peaking'; pk.frequency.value=180; pk.gain.value=6;
+    chain(brown,[lo,pk],.3);
+    lfo(nodes.noiseGain.gain,.055,.12);
+    lfo(lo.frequency,.04,220);
+    // 浪花碎裂高频
+    const pink=mkNoise('pink',4);
+    const hf=ctx.createBiquadFilter(); hf.type='highpass'; hf.frequency.value=2800;
+    const hpk=ctx.createBiquadFilter(); hpk.type='peaking'; hpk.frequency.value=5000; hpk.gain.value=4;
+    addLayer(pink,[hf,hpk],.055,'foam');
+    lfo(nodes['foam_gain'].gain,.07,.04);
+    // 海鸥偶尔叫
+    function seagull(){
+      chirp(1200+Math.random()*400, 0, 'slide');
+      timers.push(setTimeout(seagull, 8000+Math.random()*15000));
+    }
+    timers.push(setTimeout(seagull, 5000));
   }
 
-  /* ── 森林清晨 ── */
+  /* ── 山间细雨 ── */
+  function startRain(){
+    // 雨声主体
+    const pink=mkNoise('pink',5);
+    const hi=ctx.createBiquadFilter(); hi.type='highpass'; hi.frequency.value=1000;
+    const lo=ctx.createBiquadFilter(); lo.type='lowpass'; lo.frequency.value=9000;
+    const pk=ctx.createBiquadFilter(); pk.type='peaking'; pk.frequency.value=3500; pk.gain.value=5;
+    chain(pink,[hi,pk,lo],.13);
+    lfo(nodes.noiseGain.gain,.08,.04);
+    // 低频积水层
+    const brown=mkNoise('brown',4);
+    const bf=ctx.createBiquadFilter(); bf.type='bandpass'; bf.frequency.value=350; bf.Q.value=.4;
+    addLayer(brown,[bf],.07,'puddle');
+    lfo(nodes['puddle_gain'].gain,.06,.03);
+    // 雨滴打叶声（中频短脉冲）
+    startDroplets(300,700,150,500,.055);
+    // 积水水滴
+    startDroplets(600,1000,1200,3500,.08);
+    // 远处鸟鸣（雨中偶尔）
+    startBirds(.4);
+  }
+
+  /* ── 森林清晨（鸟鸣最丰富）── */
   function startForest(){
     // 微风底层
-    const pink=mkNoise('pink',5);
-    const lo=ctx.createBiquadFilter(); lo.type='lowpass'; lo.frequency.value=1800;
-    const hi=ctx.createBiquadFilter(); hi.type='highpass'; hi.frequency.value=200;
-    chain(pink,[lo,hi],.08);
-    lfo(nodes.noiseGain.gain,.09,.025);
-    // 树叶沙沙（高频粉噪）
-    const leaf=mkNoise('pink',3);
-    const lf=ctx.createBiquadFilter(); lf.type='highpass'; lf.frequency.value=4000;
-    const lg=ctx.createGain(); lg.gain.value=.06;
-    leaf.connect(lf); lf.connect(lg); lg.connect(ctx.destination); leaf.start();
-    nodes.noiseNode2=leaf;
-    lfo(lg.gain,.14,.03);
-    // 鸟鸣
-    startBirds();
-    // 偶尔水滴
-    startDroplets(600,1200,4000,9000);
+    const pink=mkNoise('pink',6);
+    const lo=ctx.createBiquadFilter(); lo.type='lowpass'; lo.frequency.value=1600;
+    const hi=ctx.createBiquadFilter(); hi.type='highpass'; hi.frequency.value=180;
+    chain(pink,[lo,hi],.07);
+    lfo(nodes.noiseGain.gain,.08,.022);
+    // 树叶沙沙（高频）
+    const leaf=mkNoise('pink',4);
+    const lf=ctx.createBiquadFilter(); lf.type='highpass'; lf.frequency.value=4500;
+    const lpk=ctx.createBiquadFilter(); lpk.type='peaking'; lpk.frequency.value=7000; lpk.gain.value=4;
+    addLayer(leaf,[lf,lpk],.05,'leaf');
+    lfo(nodes['leaf_gain'].gain,.16,.025);
+    // 丰富鸟鸣（density=2，晨鸣高峰）
+    startBirds(2);
+    // 蟋蟀（背景）
+    startCrickets();
+    // 偶尔树滴水珠
+    startDroplets(700,1400,5000,12000,.06);
   }
 
   const presets={
-    nature:{ label:'山涧溪流 · 流水潺潺', fn: startStream },
-    ocean:{  label:'海浪声   · 潮涌潮退', fn: startOcean  },
-    forest:{ label:'森林清晨 · 百鸟晨鸣', fn: startForest },
-    rain:{   label:'山间细雨 · 雨打芭蕉', fn: ()=>startRain(1) }
+    nature:{ label:'山涧溪流 · 清脆流水', fn: startStream },
+    ocean:{  label:'海浪声 · 潮涌潮退',   fn: startOcean  },
+    rain:{   label:'山间细雨 · 雨打芭蕉', fn: startRain   },
+    forest:{ label:'森林清晨 · 百鸟齐鸣', fn: startForest },
   };
 
-  /* ── 入场铃声（纯正弦衰减）── */
+  /* ── 铃声 ── */
   function bell(freq,gain){
     ensure();
-    [1,2,3].forEach((h,i)=>{
+    [1,2,3,4].forEach((h,i)=>{
       const o=ctx.createOscillator(), e=ctx.createGain();
       o.type='sine'; o.frequency.value=freq*h;
       e.gain.setValueAtTime(0,ctx.currentTime);
-      e.gain.linearRampToValueAtTime(gain/(i+1),ctx.currentTime+.02);
-      e.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+4-i*.5);
+      e.gain.linearRampToValueAtTime(gain/(i+1),ctx.currentTime+.015);
+      e.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+5-i*.6);
       o.connect(e); e.connect(ctx.destination);
-      o.start(); o.stop(ctx.currentTime+4.5);
+      o.start(); o.stop(ctx.currentTime+5.5);
     });
   }
 
   return{
     play:function(preset){
       ensure(); this.stop();
-      if(presets[preset]){ presets[preset].fn(); }
+      if(presets[preset]) presets[preset].fn();
       return presets[preset]?.label||'';
     },
     stop:function(){
       timers.forEach(t=>clearTimeout(t)); timers=[];
-      ['noiseNode','noiseNode2','lfo','lfo2'].forEach(k=>{
-        if(nodes[k]){ try{nodes[k].stop();}catch(e){} }
-      });
       Object.keys(nodes).forEach(k=>{
-        if(k.startsWith('lfo_')){ try{nodes[k].stop();}catch(e){} }
+        try{ nodes[k].stop(); }catch(e){}
       });
       nodes={};
     },
     fadeOut:function(){
-      if(nodes.noiseGain){
-        nodes.noiseGain.gain.linearRampToValueAtTime(0,ctx.currentTime+2.5);
-      }
-      if(nodes.noiseNode2){
-        try{
-          const tmp=ctx.createGain();
-          tmp.gain.linearRampToValueAtTime(0,ctx.currentTime+2.5);
-        }catch(e){}
-      }
-      setTimeout(()=>this.stop(),2800);
+      Object.values(nodes).forEach(n=>{
+        if(n && n.gain) try{ n.gain.linearRampToValueAtTime(0, ctx.currentTime+2.5); }catch(e){}
+      });
+      setTimeout(()=>this.stop(), 2800);
     },
     ringBell:function(){ bell(528,.1); }
   };
