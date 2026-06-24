@@ -97,6 +97,14 @@ html,body{height:100%;overflow:hidden;background:var(--deep);font-family:'PingFa
 .btn-install{flex:1;padding:11px;border-radius:12px;border:none;font-size:14px;cursor:pointer;background:var(--accent);color:#fff;letter-spacing:.04em}
 .btn-dismiss{flex:1;padding:11px;border-radius:12px;border:1px solid var(--ink3);background:transparent;color:var(--ink2);font-size:14px;cursor:pointer}
 
+/* ─── voice bar ─── */
+.voice-bar{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:10px 16px;width:100%;max-width:320px}
+.voice-label{font-size:12px;color:var(--ink2);flex:1;letter-spacing:.04em}
+.voice-toggle{background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:8px;color:var(--ink2);font-size:12px;padding:4px 10px;cursor:pointer;letter-spacing:.04em;transition:all .2s;white-space:nowrap}
+.voice-toggle.on{border-color:rgba(125,184,164,.6);color:var(--accent);background:rgba(125,184,164,.08)}
+.voice-ripple{width:8px;height:8px;border-radius:50%;background:var(--accent);opacity:0;transition:opacity .3s}
+.voice-ripple.active{opacity:1;animation:voicePulse 1.2s ease-in-out infinite}
+@keyframes voicePulse{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.6);opacity:1}}
 /* ─── reduced motion ─── */
 @media(prefers-reduced-motion:reduce){
   .orb-ring,.wb{animation:none!important}
@@ -398,6 +406,148 @@ const Audio = (function(){
 })();
 
 /* ═══════════════════════════════════════════
+   VOICE GUIDE ENGINE
+   Web Speech API — 普通话 TTS
+═══════════════════════════════════════════ */
+const Voice = (function(){
+  const synth = window.speechSynthesis;
+  let enabled = true;
+  let speaking = false;
+  let voiceObj = null;
+  let breathVoiceInterval = null;
+
+  // 每个步骤的引导词脚本
+  const SCRIPTS = {
+    welcome: [],
+    settle: [
+      { delay: 500,  text: '现在，让我们开始今天的练习。' },
+      { delay: 4000, text: '请找一个舒适的姿势，坐下来，或者躺着都可以。' },
+      { delay: 10000,text: '轻轻闭上眼睛。' },
+      { delay: 14000,text: '感受你的身体和地面、椅子的接触。感受这份重量和支撑。' },
+      { delay: 24000,text: '让身体沉下来，不需要做任何事，只是在这里。' },
+    ],
+    breath: [
+      { delay: 500,  text: '现在，把注意力带到呼吸上。' },
+      { delay: 6000, text: '感受每一次吸气时，气息从鼻尖流入，胸腔或腹部轻轻升起。' },
+      { delay: 16000,text: '呼气时，感受气息缓缓流出，身体慢慢放松。' },
+      { delay: 28000,text: '不需要控制呼吸，只是观察它自然的节律。' },
+      { delay: 45000,text: '如果思绪飘走了，没关系。轻轻把注意力带回呼吸，这就是练习本身。' },
+      { delay: 70000,text: '每一次回来，都是成功。' },
+    ],
+    observe: [
+      { delay: 500,  text: '很好。现在，我们扩大觉察的范围。' },
+      { delay: 6000, text: '注意此刻出现的一切：声音、感觉、念头……不抓取，不排斥。' },
+      { delay: 18000,text: '如果有念头升起，像看着云朵飘过天空一样，只是看着它。' },
+      { delay: 30000,text: '你是天空，不是云。念头来了又去，你始终在这里。' },
+      { delay: 50000,text: '如果被念头带走了，温柔地回来。不评判自己，只是回来。' },
+    ],
+    return: [
+      { delay: 500,  text: '我们来到最后一个阶段。把注意力轻轻带回呼吸。' },
+      { delay: 10000,text: '感受此刻身体的感觉，感受呼吸的节律。' },
+      { delay: 25000,text: '给自己一份感谢，感谢你为自己留下这段时光。' },
+      { delay: 40000,text: '慢慢地，开始感受周围的空间。准备好之后，睁开眼睛。' },
+    ],
+    done: [
+      { delay: 800,  text: '练习完成了。很好。' },
+      { delay: 5000, text: '带着这份平静，回到你的日常。' },
+    ],
+  };
+
+  // 呼吸语音提示词
+  const BREATH_VOICE = {
+    inhale: '吸气',
+    hold:   '屏住',
+    exhale: '呼气',
+  };
+
+  function getVoice(){
+    if(voiceObj) return voiceObj;
+    const voices = synth.getVoices();
+    // 优先选择普通话女声
+    const preferred = [
+      v => v.lang==='zh-CN' && v.name.includes('Female'),
+      v => v.lang==='zh-CN' && v.name.includes('Xiaoxiao'),
+      v => v.lang==='zh-CN' && v.name.includes('女'),
+      v => v.lang==='zh-CN',
+      v => v.lang.startsWith('zh'),
+    ];
+    for(const test of preferred){
+      const found = voices.find(test);
+      if(found){ voiceObj=found; return found; }
+    }
+    return voices[0]||null;
+  }
+
+  function speak(text, opts={}){
+    if(!enabled || !synth) return;
+    synth.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang   = 'zh-CN';
+    utt.rate   = opts.rate  || 0.88;
+    utt.pitch  = opts.pitch || 0.95;
+    utt.volume = opts.volume|| 0.9;
+    const v = getVoice();
+    if(v) utt.voice = v;
+    utt.onstart = ()=>{ speaking=true; updateRipple(true); };
+    utt.onend   = ()=>{ speaking=false; updateRipple(false); };
+    utt.onerror = ()=>{ speaking=false; updateRipple(false); };
+    synth.speak(utt);
+  }
+
+  function updateRipple(active){
+    const r=document.getElementById('voice-ripple');
+    if(r) r.classList.toggle('active', active);
+    const lbl=document.getElementById('voice-status');
+    if(lbl) lbl.textContent = active ? '正在播报' : (enabled ? '语音开启' : '语音关闭');
+  }
+
+  let scriptTimers=[];
+
+  function runScript(stepId){
+    clearScript();
+    if(!enabled) return;
+    const lines=(SCRIPTS[stepId]||[]);
+    lines.forEach(line=>{
+      const t=setTimeout(()=>speak(line.text), line.delay);
+      scriptTimers.push(t);
+    });
+  }
+
+  function clearScript(){
+    scriptTimers.forEach(t=>clearTimeout(t));
+    scriptTimers=[];
+    if(synth) synth.cancel();
+    speaking=false; updateRipple(false);
+  }
+
+  // 呼吸节拍语音（只播报阶段切换那一刻）
+  function announceBreath(phase){
+    if(!enabled) return;
+    speak(BREATH_VOICE[phase]||'', {rate:0.9, volume:0.7});
+  }
+
+  return{
+    init(){
+      // 预加载 voices（Chrome需要）
+      if(synth.getVoices().length===0){
+        synth.addEventListener('voiceschanged',()=>getVoice(),{once:true});
+      } else { getVoice(); }
+    },
+    speak,
+    runScript,
+    clearScript,
+    announceBreath,
+    toggle(){
+      enabled=!enabled;
+      if(!enabled){ clearScript(); }
+      return enabled;
+    },
+    get enabled(){ return enabled; },
+    get speaking(){ return speaking; },
+  };
+})();
+
+/* ═══════════════════════════════════════════
    SESSION DATA
 ═══════════════════════════════════════════ */
 let sessions = parseInt(localStorage.getItem('xi_sessions')||'0');
@@ -492,6 +642,7 @@ function runBreath(){
   const p=phases[phaseIdx];
   breathPhase=p.state; breathCount=p.dur;
   updateOrbState(); setPhaseUI(p.name,breathCount);
+  Voice.announceBreath(p.state);
   breathInterval=setInterval(()=>{
     breathCount--;
     setPhaseUI(p.name,breathCount);
@@ -616,6 +767,10 @@ function render(idx){
   else if(!s.sound) Audio.fadeOut();
   if(idx===1||idx===5) Audio.ringBell();
 
+  // voice guide
+  Voice.clearScript();
+  setTimeout(()=>Voice.runScript(s.id), 600);
+
   // compute step durations
   const totalSecs=(selectedMins||15)*60;
   const stepDurs=getStepDurations(totalSecs);
@@ -714,9 +869,19 @@ function render(idx){
 
   const ghostHTML=s.ghost?`<button class="btn-ghost" onclick="ghostAction()">${s.ghost}</button>`:'';
 
+  const voiceHTML=`
+    <div class="voice-bar">
+      <div id="voice-ripple" class="voice-ripple"></div>
+      <span class="voice-label" id="voice-status">${Voice.enabled?'语音开启':'语音关闭'}</span>
+      <button class="voice-toggle${Voice.enabled?' on':''}" id="voice-btn" onclick="toggleVoice()">
+        ${Voice.enabled?'🔈 关闭':'🔇 开启'}
+      </button>
+    </div>`;
+
   document.getElementById('controls-area').innerHTML=`
     <div class="controls">
       ${durHTML}
+      ${voiceHTML}
       ${musicHTML}
       <button class="btn-primary" style="background:${s.btnGrad}" onclick="nextStep()">${s.btn}</button>
       ${ghostHTML}
@@ -751,6 +916,15 @@ function ghostAction(){
   }
 }
 
+function toggleVoice(){
+  const on=Voice.toggle();
+  const btn=document.getElementById('voice-btn');
+  const lbl=document.getElementById('voice-status');
+  if(btn){ btn.textContent=on?'🔈 关闭':'🔇 开启'; btn.classList.toggle('on',on); }
+  if(lbl) lbl.textContent=on?'语音开启':'语音关闭';
+  if(on) Voice.runScript(STEPS[currentStep].id);
+}
+
 /* ═══════════════════════════════════════════
    PWA INSTALL
 ═══════════════════════════════════════════ */
@@ -780,6 +954,7 @@ xStyle.textContent=`
 `;
 document.head.appendChild(xStyle);
 
+Voice.init();
 render(0);
 </script>
 </body>
