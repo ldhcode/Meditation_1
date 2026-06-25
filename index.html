@@ -43,21 +43,33 @@ body{
   max-width:480px;margin:0 auto;width:100%;
 }
 
-/* ─── 顶栏 ─── */
+/* ─── 顶栏（练习页用）─── */
 .header{
-  display:flex;align-items:center;justify-content:space-between;
-  padding-bottom:10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding-bottom:8px;gap:6px;
 }
-.logo{font-size:20px;font-weight:300;letter-spacing:.18em;color:var(--ink)}
-.header-right{display:flex;align-items:center;gap:10px}
+.header.hidden{visibility:hidden;height:0;padding:0;overflow:hidden}
+.logo{display:none}
+.header-right{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%}
 .session-badge{
-  font-size:11px;letter-spacing:.1em;color:var(--ink2);
-  border:1px solid var(--ink3);border-radius:20px;padding:4px 11px;
+  font-size:13px;letter-spacing:.1em;color:var(--ink);
+  font-weight:300;
 }
-.dots{display:flex;gap:6px;align-items:center}
+.dots{display:flex;gap:7px;align-items:center;justify-content:center}
 .dot{width:5px;height:5px;border-radius:50%;background:var(--ink3);transition:all .35s var(--ease)}
 .dot.cur{background:var(--accent);width:16px;border-radius:3px}
 .dot.done{background:rgba(232,228,220,.35)}
+
+/* ─── 欢迎页顶部信息 ─── */
+.welcome-top{text-align:center;padding-top:4px;margin-bottom:4px}
+.welcome-session{
+  font-size:clamp(15px,4.5vw,18px);font-weight:300;
+  color:var(--ink);letter-spacing:.08em;margin-bottom:10px;
+}
+.welcome-dots{display:flex;gap:8px;justify-content:center;align-items:center;margin-bottom:2px}
+.welcome-dot{width:6px;height:6px;border-radius:50%;background:var(--ink3);transition:all .35s var(--ease)}
+.welcome-dot.cur{background:var(--accent);width:20px;border-radius:3px}
+.welcome-dot.done{background:rgba(232,228,220,.38)}
 
 /* ─── 中央舞台 ─── */
 .stage{
@@ -270,12 +282,9 @@ body{
 <body>
 <canvas id="canvas"></canvas>
 <div id="app">
-  <div class="header">
-    <div class="logo">息</div>
-    <div class="header-right">
-      <div class="dots" id="dots"></div>
-      <div class="session-badge" id="session-badge">第 1 次</div>
-    </div>
+  <div class="header" id="main-header">
+    <div class="session-badge" id="session-badge">第 1 次练习</div>
+    <div class="dots" id="dots"></div>
   </div>
   <div class="stage" id="stage"></div>
   <div id="controls-area"></div>
@@ -897,7 +906,7 @@ function getStepDurations(totalSecs){
 const STEPS=[
   {
     id:'welcome',
-    title:'息',
+    title:'气息',
     sub:'正念冥想\n为自己留一段安静的时光',
     orbColor:'rgba(90,130,180,.3)',
     orbShadow:'0 0 40px rgba(90,130,180,.2)',
@@ -1107,7 +1116,11 @@ function render(idx){
   const s=STEPS[idx];
   setHue(s.hue);
 
-  // dots (exclude welcome + done)
+  // 欢迎页隐藏顶栏，其他页显示
+  const headerEl=document.getElementById('main-header');
+  if(headerEl) headerEl.classList.toggle('hidden', s.id==='welcome');
+
+  // 更新顶栏 dots（练习页用）
   const practiceSteps=STEPS.filter(x=>!['welcome','done'].includes(x.id));
   const practiceIdx=practiceSteps.findIndex(x=>x.id===s.id);
   const dotsEl=document.getElementById('dots');
@@ -1139,11 +1152,17 @@ function render(idx){
   let stageHTML='';
 
   if(s.id==='welcome'){
+    // 欢迎页进度点（4个练习步骤）
+    const welcomeDots=practiceSteps.map((_,i)=>`<div class="welcome-dot"></div>`).join('');
     stageHTML=`
+      <div class="welcome-top fade-enter">
+        <div class="welcome-session">第 ${sessions+1} 次冥想练习</div>
+        <div class="welcome-dots">${welcomeDots}</div>
+      </div>
       <div class="orb-wrap">
         <div class="orb-ring"></div><div class="orb-ring"></div>
         <div class="orb" id="orb" style="background:${s.orbColor};box-shadow:${s.orbShadow}">
-          <div class="orb-label">息</div>
+          <div class="orb-label" style="font-size:13px;letter-spacing:.12em">冥想</div>
         </div>
       </div>
       <div class="phase-area"></div>
