@@ -786,11 +786,13 @@ const Voice = (function(){
   function getVoice(){
     if(voiceObj) return voiceObj;
     const voices = synth.getVoices();
-    // 优先选择普通话女声
+    // 优先选择温柔的普通话女声
     const preferred = [
-      v => v.lang==='zh-CN' && v.name.includes('Female'),
-      v => v.lang==='zh-CN' && v.name.includes('Xiaoxiao'),
-      v => v.lang==='zh-CN' && v.name.includes('女'),
+      v => v.lang==='zh-CN' && /Xiaoxiao|晓晓/i.test(v.name),      // 微软晓晓：最温柔自然
+      v => v.lang==='zh-CN' && /Xiaoyi|晓伊/i.test(v.name),        // 微软晓伊：柔和女声
+      v => v.lang==='zh-CN' && /Tingting|婷婷/i.test(v.name),      // Apple 婷婷
+      v => v.lang==='zh-CN' && /Female|女/i.test(v.name),
+      v => v.lang==='zh-CN' && !/Male|男/i.test(v.name),
       v => v.lang==='zh-CN',
       v => v.lang.startsWith('zh'),
     ];
@@ -806,9 +808,9 @@ const Voice = (function(){
     synth.cancel();
     const utt = new SpeechSynthesisUtterance(text);
     utt.lang   = 'zh-CN';
-    utt.rate   = opts.rate  || 0.88;
-    utt.pitch  = opts.pitch || 0.95;
-    utt.volume = opts.volume|| 0.9;
+    utt.rate   = opts.rate  || 0.68;   // 慢速：冥想引导韵味（原0.88）
+    utt.pitch  = opts.pitch || 1.06;   // 略微上扬：更轻柔女声（原0.95）
+    utt.volume = opts.volume|| 0.85;   // 稍轻：像耳边低语
     const v = getVoice();
     if(v) utt.voice = v;
     utt.onstart = ()=>{ speaking=true; updateRipple(true); };
@@ -846,7 +848,7 @@ const Voice = (function(){
   // 呼吸节拍语音（只播报阶段切换那一刻）
   function announceBreath(phase){
     if(!enabled) return;
-    speak(BREATH_VOICE[phase]||'', {rate:0.9, volume:0.7});
+    speak(BREATH_VOICE[phase]||'', {rate:0.72, pitch:1.06, volume:0.6});
   }
 
   return{
