@@ -808,7 +808,7 @@ const Voice = (function(){
     synth.cancel();
     const utt = new SpeechSynthesisUtterance(text);
     utt.lang   = 'zh-CN';
-    utt.rate   = opts.rate  || 0.68;   // 慢速：冥想引导韵味（原0.88）
+    utt.rate   = opts.rate  || 0.58;   // 慢速：冥想引导韵味（原0.88）
     utt.pitch  = opts.pitch || 1.06;   // 略微上扬：更轻柔女声（原0.95）
     utt.volume = opts.volume|| 0.85;   // 稍轻：像耳边低语
     const v = getVoice();
@@ -828,15 +828,115 @@ const Voice = (function(){
 
   let scriptTimers=[];
 
-  function runScript(stepId){
+ async function runScript(stepId){
+
     clearScript();
+
     if(!enabled) return;
-    const lines=(SCRIPTS[stepId]||[]);
-    lines.forEach(line=>{
-      const t=setTimeout(()=>speak(line.text), line.delay);
-      scriptTimers.push(t);
-    });
-  }
+
+
+    const lines = SCRIPTS[stepId] || [];
+
+
+    // 不同阶段静默时间
+    const pauseTime = {
+
+        settle:6000,
+
+        breath:8000,
+
+        observe:10000,
+
+        return:6000,
+
+        done:8000
+
+    };
+
+
+    const pause = pauseTime[stepId] || 8000;
+
+
+    for(const line of lines){
+
+
+        if(!enabled) break;
+
+
+        await new Promise(resolve=>{
+
+
+            const utt =
+            new SpeechSynthesisUtterance(
+                line.text
+            );
+
+
+            utt.lang="zh-CN";
+
+
+            const v=getVoice();
+
+            if(v){
+                utt.voice=v;
+            }
+
+
+            // 舒缓禅修语速
+
+            utt.rate=0.58;
+
+            utt.pitch=1.02;
+
+            utt.volume=0.8;
+
+
+
+            utt.onstart=()=>{
+
+                speaking=true;
+
+                updateRipple(true);
+
+            };
+
+
+            utt.onend=()=>{
+
+                speaking=false;
+
+                updateRipple(false);
+
+
+                // 语音结束后静默
+
+                setTimeout(
+                    resolve,
+                    pause
+                );
+
+            };
+
+
+            utt.onerror=()=>{
+
+                speaking=false;
+
+                updateRipple(false);
+
+                resolve();
+
+            };
+
+
+            synth.speak(utt);
+
+
+        });
+
+    }
+
+}
 
   function clearScript(){
     scriptTimers.forEach(t=>clearTimeout(t));
