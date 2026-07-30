@@ -727,6 +727,388 @@ const Mp3 = (function(){
     }
   };
 })();
+/* ═══════════════════════════════════════════
+   VOICE GUIDE ENGINE
+   Web Speech API — 普通话 TTS
+═══════════════════════════════════════════ */
+const Voice = (function(){
+  const synth = window.speechSynthesis;
+
+  let enabled = true;
+  let speaking = false;
+  let mainGuidanceSpeaking = false;
+  let voiceObj = null;
+
+  let scriptTimers = [];
+  let scriptVersion = 0;
+
+  const SCRIPTS = {
+    welcome: [],
+
+    settle: [
+      { text: '现在，让我们开始今天的练习。' },
+      { text: '请找一个舒适的姿势，坐下来，或者躺着都可以。' },
+      { text: '轻轻闭上眼睛。' },
+      { text: '感受你的身体和地面、椅子的接触。感受这份重量和支撑。' },
+      { text: '让身体沉下来，不需要做任何事，只是在这里。' }
+    ],
+
+    breath: [
+      { text: '现在，把注意力带到呼吸上。' },
+      { text: '感受每一次吸气时，气息从鼻尖流入，胸腔或腹部轻轻升起。' },
+      { text: '呼气时，感受气息缓缓流出，身体慢慢放松。' },
+      { text: '不需要控制呼吸，只是观察它自然的节律。' },
+      { text: '如果思绪飘走了，没关系。轻轻把注意力带回呼吸，这就是练习本身。' },
+      { text: '每一次回来，都是成功。' }
+    ],
+
+    observe: [
+      { text: '很好。现在，我们扩大觉察的范围。' },
+      { text: '注意此刻出现的一切：声音、感觉、念头。不抓取，不排斥。' },
+      { text: '如果有念头升起，像看着云朵飘过天空一样，只是看着它。' },
+      { text: '你是天空，不是云。念头来了又去，你始终在这里。' },
+      { text: '如果被念头带走了，温柔地回来。不评判自己，只是回来。' }
+    ],
+
+    return: [
+      { text: '我们来到最后一个阶段。把注意力轻轻带回呼吸。' },
+      { text: '感受此刻身体的感觉，感受呼吸的节律。' },
+      { text: '给自己一份感谢，感谢你为自己留下这段时光。' },
+      { text: '慢慢地，开始感受周围的空间。准备好之后，睁开眼睛。' }
+    ],
+
+    done: [
+      { text: '练习完成了。很好。' },
+      { text: '带着这份平静，回到你的日常。' }
+    ]
+  };
+
+  const BREATH_VOICE = {
+    inhale: '吸气',
+    hold: '屏住',
+    exhale: '呼气'
+  };
+
+  function getVoice(){
+    if(voiceObj){
+      return voiceObj;
+    }
+
+    const voices = synth.getVoices();
+
+    const preferred = [
+      voice =>
+        voice.lang === 'zh-CN' &&
+        /Xiaoxiao|晓晓/i.test(voice.name),
+
+      voice =>
+        voice.lang === 'zh-CN' &&
+        /Xiaoyi|晓伊/i.test(voice.name),
+
+      voice =>
+        voice.lang === 'zh-CN' &&
+        /Tingting|婷婷/i.test(voice.name),
+
+      voice =>
+        voice.lang === 'zh-CN' &&
+        /Female|女/i.test(voice.name),
+
+      voice =>
+        voice.lang === 'zh-CN' &&
+        !/Male|男/i.test(voice.name),
+
+      voice => voice.lang === 'zh-CN',
+
+      voice => voice.lang.startsWith('zh')
+    ];
+
+    for(const test of preferred){
+      const found = voices.find(test);
+
+      if(found){
+        voiceObj = found;
+        return found;
+      }
+    }
+
+    return voices[0] || null;
+  }
+
+  function updateRipple(active){
+    const ripple = document.getElementById('voice-ripple');
+
+    if(ripple){
+      ripple.classList.toggle('active', active);
+    }
+
+    const label = document.getElementById('voice-status');
+
+    if(label){
+      label.textContent = active
+        ? '正在播报'
+        : enabled
+          ? '语音引导开启'
+          : '语音引导关闭';
+    }
+  }
+
+  function wait(ms){
+    return new Promise(resolve => {
+      const timer = setTimeout(resolve, ms);
+      scriptTimers.push(timer);
+    });
+  }
+
+  function speak(text, options = {}){
+    if(!enabled || !synth || !text){
+      return Promise.resolve();
+    }
+
+    const type = options.type || 'guidance';
+
+    /*
+      呼吸提示优先级低。
+
+      主引导语播放期间，呼吸动画和文字继续运行，
+      但“吸气、屏住、呼气”暂时不播报。
+    */
+    if(
+      type === 'breath' &&
+      (mainGuidanceSpeaking || synth.speaking)
+    ){
+      return Promise.resolve();
+    }
+
+    /*
+      只有主引导语可以清除上一条语音。
+      呼吸语音不能打断主引导语。
+    */
+    if(type === 'guidance'){
+      synth.cancel();
+    }
+
+    return new Promise(resolve => {
+      const utterance =
+        new SpeechSynthesisUtterance(text);
+
+      utterance.lang = 'zh-CN';
+
+      utterance.rate =
+        options.rate ??
+        (type === 'breath' ? 0.72 : 0.58);
+
+      utterance.pitch =
+        options.pitch ??
+        (type === 'breath' ? 1.06 : 1.02);
+
+      utterance.volume =
+        options.volume ??
+        (type === 'breath' ? 0.6 : 0.8);
+
+      const voice = getVoice();
+
+      if(voice){
+        utterance.voice = voice;
+      }
+
+      utterance.onstart = function(){
+        speaking = true;
+
+        if(type === 'guidance'){
+          mainGuidanceSpeaking = true;
+        }
+
+        updateRipple(true);
+      };
+
+      function finishSpeech(){
+        speaking = false;
+
+        if(type === 'guidance'){
+          mainGuidanceSpeaking = false;
+        }
+
+        updateRipple(false);
+        resolve();
+      }
+
+      utterance.onend = finishSpeech;
+      utterance.onerror = finishSpeech;
+
+      synth.speak(utterance);
+    });
+  }
+
+  async function runScript(stepId){
+    clearScript();
+
+    if(!enabled){
+      return;
+    }
+
+    const currentVersion = scriptVersion;
+    const lines = SCRIPTS[stepId] || [];
+
+    const pauseTimes = {
+      settle: 8000,
+      breath: 12000,
+      observe: 15000,
+      return: 10000,
+      done: 8000
+    };
+
+    const pause =
+      pauseTimes[stepId] || 10000;
+
+    if(lines.length === 0){
+      return;
+    }
+
+    // 进入阶段后先留出一秒钟安静时间
+    await wait(1000);
+
+    for(let index = 0; index < lines.length; index++){
+      if(
+        !enabled ||
+        currentVersion !== scriptVersion
+      ){
+        break;
+      }
+
+      await speak(lines[index].text, {
+        type: 'guidance',
+        rate: 0.58,
+        pitch: 1.02,
+        volume: 0.8
+      });
+
+      if(
+        !enabled ||
+        currentVersion !== scriptVersion
+      ){
+        break;
+      }
+
+      if(index < lines.length - 1){
+        await wait(pause);
+      }
+    }
+  }
+
+  function clearScript(){
+    scriptVersion++;
+
+    scriptTimers.forEach(timer => {
+      clearTimeout(timer);
+    });
+
+    scriptTimers = [];
+
+    if(synth){
+      synth.cancel();
+    }
+
+    speaking = false;
+    mainGuidanceSpeaking = false;
+
+    updateRipple(false);
+  }
+
+  function announceBreath(phase){
+    if(!enabled){
+      return;
+    }
+
+    /*
+      主引导语播放期间跳过本次呼吸语音。
+      不影响呼吸动画、文字和倒计时。
+    */
+    if(mainGuidanceSpeaking || synth.speaking){
+      return;
+    }
+
+    speak(BREATH_VOICE[phase] || '', {
+      type: 'breath',
+      rate: 0.72,
+      pitch: 1.06,
+      volume: 0.6
+    });
+  }
+
+  return {
+    init(){
+      if(synth.getVoices().length === 0){
+        synth.addEventListener(
+          'voiceschanged',
+          getVoice,
+          { once: true }
+        );
+      }else{
+        getVoice();
+      }
+    },
+
+    speak,
+    runScript,
+    clearScript,
+    announceBreath,
+
+    toggle(){
+      enabled = !enabled;
+
+      if(!enabled){
+        clearScript();
+      }
+
+      return enabled;
+    },
+
+    get enabled(){
+      return enabled;
+    },
+
+    get speaking(){
+      return speaking;
+    }
+  };
+})();
+
+/* ═══════════════════════════════════════════
+   SESSION DATA
+═══════════════════════════════════════════ */
+let sessions =
+  parseInt(localStorage.getItem('xi_sessions') || '0');
+
+let totalMin =
+  parseInt(localStorage.getItem('xi_minutes') || '0');
+
+document.getElementById('session-badge').textContent =
+  `第 ${sessions + 1} 次练习`;
+
+/* ═══════════════════════════════════════════
+   DURATION CONFIG
+═══════════════════════════════════════════ */
+const DURATION_OPTIONS = [
+  { label: '5 分钟', mins: 5 },
+  { label: '10 分钟', mins: 10 },
+  { label: '20 分钟', mins: 20 },
+  { label: '自定义', mins: null }
+];
+
+let selectedMins = 10;
+
+function getStepDurations(totalSecs){
+  return [
+    Math.round(totalSecs * 0.15),
+    Math.round(totalSecs * 0.35),
+    Math.round(totalSecs * 0.30),
+    Math.round(totalSecs * 0.20)
+  ];
+}
+
+/* ═══════════════════════════════════════════
+   STEPS DEFINITION
+═══════════════════════════════════════════ */
 
 const STEPS=[
   {
