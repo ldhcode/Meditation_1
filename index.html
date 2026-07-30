@@ -1449,12 +1449,12 @@ function render(idx){
   }).join('');
 
   if(s.sound && !audioMuted){
-    Audio.stop();
-    Mp3.play();
-  } else if(!s.sound){
-    Mp3.pause();
-    Audio.fadeOut();
-  }
+  Audio.stop();
+  Mp3.play();
+} else if(!s.sound){
+  Mp3.pause();
+  Audio.fadeOut();
+}
   if(idx===1||idx===5) Audio.ringBell();
 
   // voice guide
