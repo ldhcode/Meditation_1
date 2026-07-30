@@ -686,44 +686,156 @@ const Audio = (function(){
    播放仓库中的 music.mp3
 ═══════════════════════════════════════════ */
 const Mp3 = (function(){
-  let el=null;
+  let el = null;
+
+  // 当前淡入、淡出定时器
+  let fadeTimer = null;
+
+  // 每次操作递增，用于废止旧任务
+  let operationId = 0;
+
+  const NORMAL_VOLUME = 0.55;
+
+  function clearFade(){
+    if(fadeTimer !== null){
+      clearInterval(fadeTimer);
+      fadeTimer = null;
+    }
+  }
 
   function ensure(){
-    if(el) return el;
-    el=new window.Audio('music.mp3');
-    el.loop=true;
-    el.volume=0.55;
-    // 淡入
-    el.addEventListener('play',()=>{
-      el.volume=0;
-      let v=0;
-      const fade=setInterval(()=>{
-        v=Math.min(v+.04,.55);
-        el.volume=v;
-        if(v>=.55) clearInterval(fade);
-      },80);
+    if(el){
+      return el;
+    }
+
+    el = new window.Audio('music.mp3');
+    el.loop = true;
+    el.preload = 'auto';
+    el.volume = NORMAL_VOLUME;
+
+    // 音频发生短暂卡顿后尝试继续
+    el.addEventListener('stalled', function(){
+      if(!el.paused){
+        el.load();
+
+        el.play().catch(function(){});
+      }
     });
+
     return el;
   }
 
-  return{
+  function fadeIn(audio, currentOperation){
+    clearFade();
+
+    let volume = Math.max(0, audio.volume);
+
+    fadeTimer = setInterval(function(){
+      // 已有更新的播放或暂停操作，停止当前任务
+      if(currentOperation !== operationId){
+        clearFade();
+        return;
+      }
+
+      volume = Math.min(
+        NORMAL_VOLUME,
+        volume + 0.03
+      );
+
+      audio.volume = volume;
+
+      if(volume >= NORMAL_VOLUME){
+        clearFade();
+      }
+    }, 80);
+  }
+
+  return {
     play(){
-      const a=ensure();
-      if(a.paused) a.play().catch(()=>{});
+      const audio = ensure();
+
+      operationId++;
+      const currentOperation = operationId;
+
+      // 立即废止之前尚未结束的淡出任务
+      clearFade();
+
+      /*
+        如果音乐本来就在播放，不重新加载，
+        只恢复正常音量，避免阶段切换造成中断。
+      */
+      if(!audio.paused){
+        fadeIn(audio, currentOperation);
+        return;
+      }
+
+      audio.volume = 0;
+
+      const playResult = audio.play();
+
+      if(playResult){
+        playResult
+          .then(function(){
+            if(currentOperation !== operationId){
+              return;
+            }
+
+            fadeIn(audio, currentOperation);
+          })
+          .catch(function(error){
+            console.warn('背景音乐播放失败：', error);
+          });
+      }
     },
+
     pause(){
-      if(!el) return;
-      // 淡出再暂停
-      let v=el.volume;
-      const fade=setInterval(()=>{
-        v=Math.max(v-.05,0);
-        el.volume=v;
-        if(v<=0){ clearInterval(fade); el.pause(); }
-      },60);
+      if(!el){
+        return;
+      }
+
+      operationId++;
+      const currentOperation = operationId;
+
+      clearFade();
+
+      let volume = el.volume;
+
+      fadeTimer = setInterval(function(){
+        // pause 后又执行了 play，旧淡出任务立即失效
+        if(currentOperation !== operationId){
+          clearFade();
+          return;
+        }
+
+        volume = Math.max(0, volume - 0.04);
+        el.volume = volume;
+
+        if(volume <= 0){
+          clearFade();
+
+          // 再次确认当前仍是此次暂停操作
+          if(currentOperation === operationId){
+            el.pause();
+          }
+        }
+      }, 60);
     },
+
     stop(){
-      if(!el) return;
-      el.pause(); el.currentTime=0; el.volume=0;
+      operationId++;
+      clearFade();
+
+      if(!el){
+        return;
+      }
+
+      el.pause();
+      el.currentTime = 0;
+      el.volume = NORMAL_VOLUME;
+    },
+
+    isPlaying(){
+      return Boolean(el && !el.paused);
     }
   };
 })();
