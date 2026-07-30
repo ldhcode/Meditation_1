@@ -732,278 +732,172 @@ const Mp3 = (function(){
    VOICE GUIDE ENGINE
    Web Speech API — 普通话 TTS
 ═══════════════════════════════════════════ */
-const Voice = (function(){
-  const synth = window.speechSynthesis;
-  let enabled = true;
-  let speaking = false;
-  let voiceObj = null;
-  let breathVoiceInterval = null;
+function speak(text, opts = {}){
+  if(!enabled || !synth || !text) return Promise.resolve();
 
-  // 每个步骤的引导词脚本
-  const SCRIPTS = {
-    welcome: [],
-    settle: [
-      { delay: 1000,  text: '现在，让我们开始今天的练习。' },
-      { delay: 9000,  text: '请找一个舒适的姿势，坐下来，或者躺着都可以。' },
-      { delay: 19000, text: '轻轻闭上眼睛。' },
-      { delay: 27000, text: '感受你的身体和地面、椅子的接触。感受这份重量和支撑。' },
-      { delay: 42000, text: '让身体沉下来，不需要做任何事，只是在这里。' },
-    ],
-    breath: [
-      { delay: 1000,  text: '现在，把注意力带到呼吸上。' },
-      { delay: 12000, text: '感受每一次吸气时，气息从鼻尖流入，胸腔或腹部轻轻升起。' },
-      { delay: 28000, text: '呼气时，感受气息缓缓流出，身体慢慢放松。' },
-      { delay: 45000, text: '不需要控制呼吸，只是观察它自然的节律。' },
-      { delay: 70000, text: '如果思绪飘走了，没关系。轻轻把注意力带回呼吸，这就是练习本身。' },
-      { delay: 100000,text: '每一次回来，都是成功。' },
-    ],
-    observe: [
-      { delay: 1000,  text: '很好。现在，我们扩大觉察的范围。' },
-      { delay: 12000, text: '注意此刻出现的一切：声音、感觉、念头……不抓取，不排斥。' },
-      { delay: 30000, text: '如果有念头升起，像看着云朵飘过天空一样，只是看着它。' },
-      { delay: 50000, text: '你是天空，不是云。念头来了又去，你始终在这里。' },
-      { delay: 75000, text: '如果被念头带走了，温柔地回来。不评判自己，只是回来。' },
-    ],
-    return: [
-      { delay: 1000,  text: '我们来到最后一个阶段。把注意力轻轻带回呼吸。' },
-      { delay: 16000, text: '感受此刻身体的感觉，感受呼吸的节律。' },
-      { delay: 34000, text: '给自己一份感谢，感谢你为自己留下这段时光。' },
-      { delay: 52000, text: '慢慢地，开始感受周围的空间。准备好之后，睁开眼睛。' },
-    ],
-    done: [
-      { delay: 1000,  text: '练习完成了。很好。' },
-      { delay: 7000,  text: '带着这份平静，回到你的日常。' },
-    ],
-  };
+  const type = opts.type || 'guidance';
 
-  // 呼吸语音提示词
-  const BREATH_VOICE = {
-    inhale: '吸气',
-    hold:   '屏住',
-    exhale: '呼气',
-  };
-
-  function getVoice(){
-    if(voiceObj) return voiceObj;
-    const voices = synth.getVoices();
-    // 优先选择温柔的普通话女声
-    const preferred = [
-      v => v.lang==='zh-CN' && /Xiaoxiao|晓晓/i.test(v.name),      // 微软晓晓：最温柔自然
-      v => v.lang==='zh-CN' && /Xiaoyi|晓伊/i.test(v.name),        // 微软晓伊：柔和女声
-      v => v.lang==='zh-CN' && /Tingting|婷婷/i.test(v.name),      // Apple 婷婷
-      v => v.lang==='zh-CN' && /Female|女/i.test(v.name),
-      v => v.lang==='zh-CN' && !/Male|男/i.test(v.name),
-      v => v.lang==='zh-CN',
-      v => v.lang.startsWith('zh'),
-    ];
-    for(const test of preferred){
-      const found = voices.find(test);
-      if(found){ voiceObj=found; return found; }
-    }
-    return voices[0]||null;
+  // 主引导语播放期间，呼吸提示只显示，不播报
+  if(type === 'breath' && (mainGuidanceSpeaking || synth.speaking)){
+    return Promise.resolve();
   }
 
-  function speak(text, opts={}){
-    if(!enabled || !synth) return;
+  // 主引导语可以结束上一句；呼吸提示不能打断主引导语
+  if(type === 'guidance'){
     synth.cancel();
+  }
+
+  return new Promise(resolve => {
     const utt = new SpeechSynthesisUtterance(text);
-    utt.lang   = 'zh-CN';
-    utt.rate   = opts.rate  || 0.58;   // 慢速：冥想引导韵味（原0.88）
-    utt.pitch  = opts.pitch || 1.06;   // 略微上扬：更轻柔女声（原0.95）
-    utt.volume = opts.volume|| 0.85;   // 稍轻：像耳边低语
+
+    utt.lang = 'zh-CN';
+    utt.rate = opts.rate ?? (type === 'breath' ? 0.72 : 0.58);
+    utt.pitch = opts.pitch ?? (type === 'breath' ? 1.06 : 1.02);
+    utt.volume = opts.volume ?? (type === 'breath' ? 0.6 : 0.8);
+
     const v = getVoice();
     if(v) utt.voice = v;
-    utt.onstart = ()=>{ speaking=true; updateRipple(true); };
-    utt.onend   = ()=>{ speaking=false; updateRipple(false); };
-    utt.onerror = ()=>{ speaking=false; updateRipple(false); };
-    synth.speak(utt);
-  }
 
-  function updateRipple(active){
-    const r=document.getElementById('voice-ripple');
-    if(r) r.classList.toggle('active', active);
-    const lbl=document.getElementById('voice-status');
-    if(lbl) lbl.textContent = active ? '正在播报' : (enabled ? '语音引导开启' : '语音引导关闭');
-  }
+    utt.onstart = () => {
+      speaking = true;
 
-  let scriptTimers=[];
+      if(type === 'guidance'){
+        mainGuidanceSpeaking = true;
+      }
 
- async function runScript(stepId){
-
-    clearScript();
-
-    if(!enabled) return;
-
-
-    const lines = SCRIPTS[stepId] || [];
-
-
-    // 不同阶段静默时间
-    const pauseTime = {
-
-        settle:6000,
-
-        breath:8000,
-
-        observe:10000,
-
-        return:6000,
-
-        done:8000
-
+      updateRipple(true);
     };
 
+    const finishSpeech = () => {
+      speaking = false;
 
-    const pause = pauseTime[stepId] || 8000;
+      if(type === 'guidance'){
+        mainGuidanceSpeaking = false;
+      }
 
+      updateRipple(false);
+      resolve();
+    };
 
-    for(const line of lines){
+    utt.onend = finishSpeech;
+    utt.onerror = finishSpeech;
 
+    synth.speak(utt);
+  });
+}
 
-        if(!enabled) break;
+function updateRipple(active){
+  const r = document.getElementById('voice-ripple');
 
+  if(r){
+    r.classList.toggle('active', active);
+  }
 
-        await new Promise(resolve=>{
+  const lbl = document.getElementById('voice-status');
 
+  if(lbl){
+    lbl.textContent = active
+      ? '正在播报'
+      : (enabled ? '语音引导开启' : '语音引导关闭');
+  }
+}
 
-            const utt =
-            new SpeechSynthesisUtterance(
-                line.text
-            );
+let scriptTimers = [];
+let scriptVersion = 0;
 
+function wait(ms){
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, ms);
+    scriptTimers.push(timer);
+  });
+}
 
-            utt.lang="zh-CN";
+async function runScript(stepId){
+  clearScript();
 
+  if(!enabled) return;
 
-            const v=getVoice();
+  // 本次脚本编号，用于阶段切换后终止旧脚本
+  const currentVersion = scriptVersion;
+  const lines = SCRIPTS[stepId] || [];
 
-            if(v){
-                utt.voice=v;
-            }
+  // 每句话播放结束后的静默时间
+  const pauseTime = {
+    settle: 8000,
+    breath: 12000,
+    observe: 15000,
+    return: 10000,
+    done: 8000
+  };
 
+  const pause = pauseTime[stepId] || 10000;
 
-            // 舒缓禅修语速
-
-            utt.rate=0.58;
-
-            utt.pitch=1.02;
-
-            utt.volume=0.8;
-
-
-
-            utt.onstart=()=>{
-
-                speaking=true;
-
-                updateRipple(true);
-
-            };
-
-
-            utt.onend=()=>{
-
-                speaking=false;
-
-                updateRipple(false);
-
-
-                // 语音结束后静默
-
-                setTimeout(
-                    resolve,
-                    pause
-                );
-
-            };
-
-
-            utt.onerror=()=>{
-
-                speaking=false;
-
-                updateRipple(false);
-
-                resolve();
-
-            };
-
-
-            synth.speak(utt);
-
-
-        });
-
+  for(let i = 0; i < lines.length; i++){
+    if(!enabled || currentVersion !== scriptVersion){
+      break;
     }
 
+    // 第一条延迟使用自身 delay
+    // 后续语句主要由“上一句结束后的静默时间”控制
+    if(i === 0){
+      await wait(lines[i].delay || 1000);
+    }
+
+    if(!enabled || currentVersion !== scriptVersion){
+      break;
+    }
+
+    await speak(lines[i].text, {
+      type: 'guidance',
+      rate: 0.58,
+      pitch: 1.02,
+      volume: 0.8
+    });
+
+    if(!enabled || currentVersion !== scriptVersion){
+      break;
+    }
+
+    // 最后一句播放后不再额外等待
+    if(i < lines.length - 1){
+      await wait(pause);
+    }
+  }
 }
 
-  function clearScript(){
-    scriptTimers.forEach(t=>clearTimeout(t));
-    scriptTimers=[];
-    if(synth) synth.cancel();
-    speaking=false; updateRipple(false);
+function clearScript(){
+  // 使正在运行的旧 runScript 自动退出
+  scriptVersion++;
+
+  scriptTimers.forEach(timer => clearTimeout(timer));
+  scriptTimers = [];
+
+  if(synth){
+    synth.cancel();
   }
 
-  // 呼吸节拍语音（只播报阶段切换那一刻）
-  function announceBreath(phase){
-    if(!enabled) return;
-    speak(BREATH_VOICE[phase]||'', {rate:0.72, pitch:1.06, volume:0.6});
-  }
+  speaking = false;
+  mainGuidanceSpeaking = false;
 
-  return{
-    init(){
-      // 预加载 voices（Chrome需要）
-      if(synth.getVoices().length===0){
-        synth.addEventListener('voiceschanged',()=>getVoice(),{once:true});
-      } else { getVoice(); }
-    },
-    speak,
-    runScript,
-    clearScript,
-    announceBreath,
-    toggle(){
-      enabled=!enabled;
-      if(!enabled){ clearScript(); }
-      return enabled;
-    },
-    get enabled(){ return enabled; },
-    get speaking(){ return speaking; },
-  };
-})();
-
-/* ═══════════════════════════════════════════
-   SESSION DATA
-═══════════════════════════════════════════ */
-let sessions = parseInt(localStorage.getItem('xi_sessions')||'0');
-let totalMin = parseInt(localStorage.getItem('xi_minutes')||'0');
-document.getElementById('session-badge').textContent = `第 ${sessions+1} 次练习`;
-
-/* ═══════════════════════════════════════════
-   DURATION CONFIG
-   durations in seconds per step (4 practice steps)
-   ratios: settle 15%, breath 35%, observe 30%, return 20%
-═══════════════════════════════════════════ */
-const DURATION_OPTIONS=[
-  {label:'5 分钟', mins:5},
-  {label:'10 分钟', mins:10},
-  {label:'20 分钟', mins:20},
-  {label:'自定义', mins:null},
-];
-let selectedMins=10;
-
-// step durations derived from total
-function getStepDurations(totalSecs){
-  return [
-    Math.round(totalSecs*.15), // settle
-    Math.round(totalSecs*.35), // breath
-    Math.round(totalSecs*.30), // observe
-    Math.round(totalSecs*.20), // return
-  ];
+  updateRipple(false);
 }
 
-/* ═══════════════════════════════════════════
-   STEPS DEFINITION
+// 呼吸阶段切换提示
+function announceBreath(phase){
+  if(!enabled) return;
+
+  // 主引导语正在播放时，跳过本次呼吸语音
+  if(mainGuidanceSpeaking || synth.speaking){
+    return;
+  }
+
+  speak(BREATH_VOICE[phase] || '', {
+    type: 'breath',
+    rate: 0.72,
+    pitch: 1.06,
+    volume: 0.6
+  });
+}
 ═══════════════════════════════════════════ */
 const STEPS=[
   {
